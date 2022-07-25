@@ -6,7 +6,8 @@ test_that('Structure of test objects.', {
   x <- rexp_delayed(n = 131L, delay = 5, rate = .1)
   y <- rexp_delayed(n = 111L, delay = 5, rate = .3)
 
-  ted_d <- test_diff(x = x, y = y, distribution = 'expon', param = 'delay', R = 19, type = 'bootstrap')
+  ted_d <- test_diff(x = x, y = y, distribution = 'expon', param = 'delay',
+                     R = 19, type = 'bootstrap')
 
   expect_s3_class(ted_d, class = 'incubate_test')
   expect_identical(names(ted_d), c('t_obs', 'testDist', 'R', 'chisq_df_hat', 'param', 'P'))
@@ -33,8 +34,8 @@ test_that('GOF-test on single-group exponentials', {
   # list: for each scenario, the vector of Moran's GOF-test p-value
   GOF_pvals <- list(
     moran = purrr::map(.x = fitting_expos, .f = ~ purrr::map_dbl(., function(fit) test_GOF(fit, method = 'moran')$p.value)),
-    pearson = purrr::map(.x = fitting_expos, .f = ~ purrr::map_dbl(., function(fit) test_GOF(fit, method = 'pearson')$p.value)),
-    ad = purrr::map(.x = fitting_expos, .f = ~ purrr::map_dbl(., function(fit) test_GOF(fit, method = 'ad')$p.value))
+    pearson = purrr::map(.x = fitting_expos, .f = ~ purrr::map_dbl(., function(fit) test_GOF(fit, method = 'pearson')$p.value))
+    #ad = purrr::map(.x = fitting_expos, .f = ~ purrr::map_dbl(., function(fit) test_GOF(fit, method = 'ad')$p.value))
   )
 
   # # to visualize the GOF P-values:
@@ -48,8 +49,8 @@ test_that('GOF-test on single-group exponentials', {
   # use purrr::flatten(GOF_pvals) as data argument to walk to test *all* in one go
   purrr::walk(GOF_pvals[['pearson']], .f = ~expect_gt(object = mean(.), expected = 0.25))
   purrr::walk(GOF_pvals[['pearson']], .f = ~expect_lt(object = mean(.), expected = 0.75))
-  purrr::walk(GOF_pvals[['ad']], .f = ~expect_gt(object = mean(.), expected = 0.25))
-  purrr::walk(GOF_pvals[['ad']], .f = ~expect_lt(object = mean(.), expected = 0.75))
+  # purrr::walk(GOF_pvals[['ad']], .f = ~expect_gt(object = mean(.), expected = 0.25))
+  # purrr::walk(GOF_pvals[['ad']], .f = ~expect_lt(object = mean(.), expected = 0.75))
 
   purrr::walk(GOF_pvals[['moran']], .f = ~expect_gt(object = mean(.), expected = 0.35))
   purrr::walk(GOF_pvals[['moran']], .f = ~expect_lt(object = mean(.), expected = 0.65))
@@ -122,7 +123,7 @@ test_that("Test difference in delay when H0 is true (no difference in delay)", {
   testthat::skip_on_cran()
   testthat::skip(message = 'Too long to run every time!')
 
-  plan(future.callr::callr, workers = 3L)
+  future::plan(future.callr::callr, workers = 3L)
 
   set.seed(20210506)
 

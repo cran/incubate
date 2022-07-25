@@ -1,4 +1,24 @@
 
+# incubate 1.2.0
+* check for minimal number of observations and fail early if not enough observations
+* `test_diff`:
+    * test-statistic gets lower bound of 0 enforced (a restricted model can not have better fit than unrestricted model)
+    * deactivate Anderson-Darling (AD) GOF-test as its performance in simulations under two-group setting was unsatisfactory
+* include simulation R-scripts in package under `inst/scripts/` folder. When the package is installed the scripts are found at in the -directory `scripts/` within the package.
+* rename methods:
+    * 'MSE' => 'MPSE' (as the term MSE has already other meanings)
+    * 'MLE' => 'MLE0' (to indicate that this is the standard MLE that is not appropriate for delay models)
+* rework implementation of objective-function: do not rely on attributes but use the environment of the objective function instead. This means fewer copies of information are made.
+
+# incubate 1.1.9
+* New implementation of delay smoothing: use objective function along candidate delay values to guide in smoothing
+    * define an interval for delay candidate values
+    * sample from this interval according to the objective function: the better the value of the objective function the more likely it is to sample a value. For speed of computation, we vary only delay and keep the other parameters at their estimate.
+    * use `smd_factor` to either concentrate or flatten around the best delay estimate
+* Better implementation for MLE-fitting:
+    * Support MLE-fitting also for Weibull (one group setting only)
+    * Move MLE-objective function into a general objective function factory method
+
 # incubate 1.1.8
 * correct URL for bug reports in DESCRIPTION
 

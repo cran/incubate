@@ -4,12 +4,12 @@
 #'
 #' @importFrom future plan
 #' @importFrom future.apply future_apply
-#' @importFrom ggplot2 aes_
 #' @importFrom glue glue
 #' @importFrom MASS boxcox
 #' @importFrom purrr chuck
-#' @importFrom scales label_percent
+#' @importFrom rlang .data
 #' @importFrom survival Surv
+#' @importFrom stats coef simulate update
 #' @importFrom tibble tibble
 #' @name incubate
 #' @docType package

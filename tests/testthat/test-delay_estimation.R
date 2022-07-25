@@ -3,7 +3,10 @@
 # in particular parameter estimates, convergence etc. from the model fit object
 
 test_that("Fit delayed Exponentials", {
-  # from a call to rexp_delayed(16, delay = 9, rate = 0.5)
+
+  # single group ------------------------------------------------------------
+
+  # rexp_delayed(16, delay = 9, rate = 0.5)
   xx <- c(9.37584220431745, 9.43687826953828, 9.44079428166151, 9.63324003852904,
           9.6421,
           9.76594032067806, 9.80526794679463, 9.90732720028609, 10.3573373407125,
@@ -15,14 +18,47 @@ test_that("Fit delayed Exponentials", {
   fd_exp <- delay_model(xx, distribution = "expon")
   coef_exp <- coef(fd_exp)
 
+  expect_type(fd_exp$data, type = 'double')
   expect_identical(length(fd_exp$data), expected = 16L)
+  expect_named(coef(fd_exp), expected = c('delay', 'rate'))
+  expect_named(fd_exp$optimizer, expected = c('convergence', 'message', 'counts', 'optim_args'))
   # optim converges properly for this data vector!
-  # convergence=51 is warning from L-BFGS-B
-  # convergence=52 is error from L-BFGS-B
+  # * convergence=51 is warning from L-BFGS-B
+  # * convergence=52 is error from L-BFGS-B
   expect_identical(purrr::chuck(fd_exp, 'optimizer', 'convergence'), expected = 0L)
+  expect_type(purrr::chuck(fd_exp, 'optimizer', 'optim_args'), type = 'list')
 
   expect_equal(coef_exp[[1L]], expected = 9, tolerance = .04)
   expect_equal(coef_exp[[2L]], expected = 0.5, tolerance = .4)
+
+  # update does not change structure
+  fd_exp_oa <- purrr::pluck(fd_exp, 'optimizer', 'optim_args')
+  expect_identical(update(fd_exp, optim_args = fd_exp_oa), expected = fd_exp)
+  # effect of worse start values
+  fd_exp_upd <- update(fd_exp, optim_args = purrr::assign_in(fd_exp_oa, 'par', c(1, .1)))
+  expect_gt(min(fd_exp_upd$optimizer$counts), expected = min(fd_exp$optimizer$counts))
+  # add a little safty margin as buffer
+  expect_gte(fd_exp_upd$val + 1e-05, expected = fd_exp$val)
+
+  # MLE0 fit ----------------------------------------------------------------
+  fd_exp_MLE0 <- delay_model(xx, distribution = 'expon', method = 'MLE0')
+
+  expect_type(fd_exp_MLE0$data, type = 'double')
+  expect_identical(length(fd_exp_MLE0$data), expected = 16L)
+  expect_identical(length(coef(fd_exp_MLE0)), expected = 2L)
+
+  expect_identical(coef(fd_exp_MLE0)[['delay']], expected = xx[[1L]])
+  # MLE's later delay is compensated for by higher estimated rate
+  expect_gt(coef(fd_exp_MLE0)[['rate']], expected = coef_exp[['rate']])
+
+  expect_named(fd_exp_MLE0$optimizer, expected = c('convergence', 'message', 'counts'))
+  expect_identical(purrr::chuck(fd_exp_MLE0, 'optimizer', 'convergence'), expected = 0L)
+  fd_exp_MLE0_opt <- attr(fd_exp_MLE0$objFun, which = 'opt', exact = TRUE)
+  expect_type(fd_exp_MLE0_opt, type = 'list')
+  expect_named(fd_exp_MLE0_opt, expected = c('par', 'value', 'convergence', 'message', 'counts'))
+
+
+  # 2nd group ---------------------------------------------------------------
 
   set.seed(20220429)
   yy <- rexp_delayed(27L, delay = 10.2, rate = .9)
@@ -30,7 +66,13 @@ test_that("Fit delayed Exponentials", {
   fd_exp2 <- delay_model(x = xx, y = yy, distribution = "expon")
   coef_exp2 <- coef(fd_exp2)
 
+  expect_type(fd_exp2$data, type = 'list')
+  # data gets sorted
+  expect_identical(fd_exp2$data$y, sort(yy))
+  expect_named(fd_exp2$optimizer, expected = c('convergence', 'message', 'counts', 'optim_args'))
   expect_identical(purrr::chuck(fd_exp2, 'optimizer', 'convergence'), expected = 0L)
+  expect_type(purrr::chuck(fd_exp2, 'optimizer', 'optim_args'), type = 'list')
+  # coefficient do not change much when adding a 2nd independent group and no binding
   expect_equal(as.numeric(coef_exp2[1:2]), expected = as.numeric(coef_exp), tolerance = .01)
 
 
@@ -38,6 +80,7 @@ test_that("Fit delayed Exponentials", {
   fd_exp2b <- delay_model(x = xx, y = yy, distribution = "expon", bind = "delay")
   coef_exp2b <- coef(fd_exp2b)
 
+  expect_named(fd_exp2b$optimizer, expected = c('convergence', 'message', 'counts', 'optim_args'))
   expect_identical(purrr::chuck(fd_exp2b, 'optimizer', 'convergence'), expected = 0L)
   # the bound delay is near the minimum of the two delay estimates from the individual group fits
   expect_equal(coef_exp2b[[1L]],
@@ -58,7 +101,8 @@ test_that("Fit delayed Exponentials", {
 })
 
 
-test_that("Fit delayed Weibull", {
+
+test_that("Fit delayed Weibull with MPSE", {
 
   # from Dumonceaux and Antle (1973)
   # as cited by Cheng (1982)
@@ -124,15 +168,16 @@ test_that("Fit delayed Weibull", {
 })
 
 
-test_that('confidence intervals', {
+test_that('Confidence intervals', {
   testthat::skip_on_cran()
   set.seed(1234)
 
 
-  obs_sim <- rexp_delayed(n = 29, delay = 5, rate = .3)
+  obs_sim <- rexp_delayed(n = 29L, delay = 5, rate = .3)
 
   fm <- delay_model(x = obs_sim, distribution = 'expon')
 
+  # use default smd_factor
   bs_data <- incubate:::bsDataStep(fm, R = 1199, useBoot = FALSE)
   # set up identical bs_data from boot-package
   bs_data_bt <- incubate:::bsDataStep(fm, R = 3, useBoot = TRUE)
@@ -146,11 +191,4 @@ test_that('confidence intervals', {
                 ci_boot <- confint(fm, bs_data = bs_data_bt, bs_infer = .x, useBoot = TRUE)
                 expect_equal(ci_own, ci_boot, tolerance = 1e-3)})
 
-  logInfDF <- expand.grid(bsi = c('lognormal', 'logquantile'),
-                          logsh = c(.0001, .001, .01, .1, .2, .89, 1, 2, 10, 40),
-                          KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
-  purrr::walk2(.x = logInfDF$bsi, .y = logInfDF$logsh,
-              .f = ~expect_equal(confint(fm, bs_data = bs_data, bs_infer = .x, logshift_delay = .y),
-                                 confint(fm, bs_data = bs_data_bt, bs_infer = .x, logshift_delay = .y, useBoot = TRUE),
-                                 tolerance = 1e-3))
 })

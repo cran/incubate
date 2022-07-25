@@ -3,26 +3,25 @@
 #'
 #' The GOF-test is performed for a fitted delay-model.
 #' There are different GOF-tests implemented:
-#' * __Moran GOF__ is based on spacings, like the MSE-criterion itself.
+#' * __Moran GOF__ is based on spacings, like the MPSE-criterion itself.
 #' * __Pearson GOF__ uses categories and compares observed to expected frequencies.
-#' * __Anderson-Darling GOF__ makes inference based on the cumulative distribution function.
 #'
 #' @param delayFit delay_model fit
 #' @param method character(1). which method to use for GOF. Default is 'moran'.
 #' @return An `htest`-object containing the GOF-test result
 #' @export
-test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'anderson')){
+test_GOF <- function(delayFit, method = c('moran', 'pearson')){
 
   stopifnot( inherits(delayFit, what = 'incubate_fit') )
   method <- match.arg(method)
 
-  if (delayFit$method != 'MSE'){
-    stop('Goodness-of-fit test only supported for models that are fit with maximum spacing estimation (MSE)!')
+  if (delayFit$method != 'MPSE'){
+    stop('Goodness-of-fit test only supported for models that are fit with maximum product of spacings estimation (MPSE)!')
   }
 
-  twoGr <- isTRUE(delayFit$twoGroup)
-  data_name <- if (twoGr) paste(names(delayFit$data), collapse = ' and ') else 'x'
-  nObs <- if (twoGr) lengths(delayFit$data) else length(delayFit$data)
+  twoGroup <- isTRUE(delayFit$twoGroup)
+  data_name <- if (twoGroup) paste(names(delayFit$data), collapse = ' and ') else 'x'
+  nObs <- if (twoGroup) lengths(delayFit$data) else length(delayFit$data)
   params <- coef(delayFit)
   k <- length(params)
 
@@ -54,7 +53,7 @@ test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'ander
            }# fun
 
 
-           statist <- if (twoGr){ ##  && length(delayFit$bind) < length(oNames) # not needed!?
+           statist <- if (twoGroup){ ##  && length(delayFit$bind) < length(oNames) # not needed!?
              # sum of two independent chi-sq. is chi-sq
              c(`X^2` = sum(testStat_mo(mseCrit = delayFit$objFun(pars = params, aggregated = FALSE), #criterion per group
                                        n = nObs, k = k/2)) )
@@ -81,14 +80,14 @@ test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'ander
              c(`X^2` = sum((tab_transf - mean(tab_transf))**2L) / mean(tab_transf))
            }
 
-           if (twoGr) {
+           if (twoGroup) {
              nCl <- pmax.int(k/2 + 2L, ceiling(2L * nObs**.4))
              # sum of two chi-square test statistics
-             statist <- c(`X^2` = sum(purrr::map2_dbl(.x = delayFit$data_transf, .y = nCl, .f = testStat_pe)))
+             statist <- c(`X^2` = sum(purrr::map2_dbl(.x = transform(delayFit), .y = nCl, .f = testStat_pe)))
              p_val <- stats::pchisq(q = statist, df = sum(nCl) - k - 2L, lower.tail = FALSE)
            } else {
              nCl <- max(k + 2L, ceiling(2L * nObs**.4))
-             statist <- testStat_pe(datr = delayFit$data_transf, nCl = nCl)
+             statist <- testStat_pe(datr = transform(delayFit), nCl = nCl)
              # inference based on Chi-square distribution.
              # use adjusted degrees of freedom (loose one df for each parameter estimated)
              p_val <- stats::pchisq(q = statist, df = nCl - k - 1L, lower.tail = FALSE)
@@ -109,13 +108,13 @@ test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'ander
              -n - mean((2L * i - 1L) * log(datr) + (2L*n - (2L*i-1L))*log(1-datr))
            }
 
-           A2 <- if (twoGr) {
-             purrr::map2_dbl(.x = delayFit$data_transf, .y = nObs, .f = testStat_ad)
+           A2 <- if (twoGroup) {
+             purrr::map2_dbl(.x = transform(delayFit), .y = nObs, .f = testStat_ad)
            } else {
-             testStat_ad(datr = delayFit$data_transf, n = nObs)
+             testStat_ad(datr = transform(delayFit), n = nObs)
            }
 
-           p_val <- if ( identical(delayFit$distribution, 'exponential') ){
+           p_val <- if ( delayFit$distribution == 'exponential' ){
              # modification for Exponential (cf Stephens, Table 4.14, p.138)
              # the correction factor approaches 1 from above.
              # We keep the number of N as all observations, independent of the number of parameters estimated in the null-model.
@@ -125,13 +124,13 @@ test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'ander
              .ad_pval[['exponential']](A2_mod)
 
            } else {
-             stopifnot( identical(delayFit$distribution, 'weibull') )
+             stopifnot( delayFit$distribution == 'weibull' )
              # P-value for Weibull based on Lockhart, 1994 (Table 1)
              # interpolation model on logits using critical value and inverse of shape parameter
              .ad_pval[['weibull']](A2, params[grepl('shape', names(params), fixed = TRUE)])
            }
 
-           if (twoGr){
+           if (twoGroup){
              A2 <- paste(signif(A2, 4), collapse = ' and ')
              # use Liptak to bring both P-values of AD-tests per group together
              p_val <- stats::pnorm(sum(sqrt(nObs) * stats::qnorm(p_val)) / sqrt(sum(nObs)))
@@ -141,7 +140,7 @@ test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'ander
 
          },
          # catch all
-         stop('This method is not supported!')
+         stop('This GOF-test method is not supported!')
   )
 
 
@@ -157,7 +156,7 @@ test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'ander
 }
 
 
-#' Test the difference for delay model parameter(s) between two uncorrelated groups, based on maximum spacing estimation (MSE).
+#' Test the difference for delay model parameter(s) between two uncorrelated groups, based on maximum product of spacings estimation (MPSE).
 #'
 #' It is in fact a model comparison between a null model where the parameters are enforced to be equal and an unconstrained full model.
 #' As test statistic we use twice the difference in best (=lowest) objective function value, i.e. 2 * (`val_0` - `val_1`).
@@ -184,29 +183,32 @@ test_GOF <- function(delayFit, method = c('moran', 'pearson', 'AD', 'ad', 'ander
 #' @return list with the results of the test. Element P contains the different P-values, for instance from parametric bootstrap
 #' @export
 test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("exponential", "weibull"), param = "delay", R = 400,
-                      ties = c('equidist', 'density', 'random'), type = c('all', 'bootstrap', 'gof', 'moran', 'pearson', 'ad', 'lr', 'lr_pp'),
+                      ties = c('density', 'equidist', 'random', 'error'), type = c('all', 'bootstrap', 'gof', 'moran', 'pearson', 'lr', 'lr_pp'),
                       verbose = 0) {
-  STRICT <- TRUE #keep only conv=0 model fits?
-  TOL_CRIT <- 1e-6
-  distribution <- match.arg(distribution)
-  ties <- match.arg(ties)
-  type <- match.arg(type)
+  STRICT <- TRUE #accept models only if they converged flawlessly, i.e., convergence=0
+  TOL_CRIT <- 1e-7
+  distribution <- match.arg(arg = distribution)
+  ties <- match.arg(arg = ties)
+  type <- tolower(type)
+  type <- match.arg(arg = type)
   par_names <- getDist(distribution = distribution, type = "param")
   stopifnot( is.numeric(x), length(x) > length(par_names), is.numeric(y), length(y) > length(par_names) )
   stopifnot( is.numeric(R), length(R) == 1L, R >= 1L )
   stopifnot( is.character(param), length(param) >= 1L, nzchar(param) )
+  if (is.logical(verbose)) verbose <- as.numeric(verbose)
+  if ( is.null(verbose) || ! is.numeric(verbose) || ! is.finite(verbose) ) verbose <- 0
+  verbose <- verbose[[1L]]
 
   # bitmask for test types
-  testMask <- purrr::set_names(logical(6L), nm = c('bootstrap', 'pearson', 'moran', 'ad', 'lr', 'lr_pp'))
+  testMask <- purrr::set_names(logical(5L), nm = c('bootstrap', 'pearson', 'moran', 'lr', 'lr_pp'))
 
   switch(EXPR = type,
          all = { testMask <- testMask | TRUE },
          # bootstrap + LR-tests (for stankovic results) #use better flags? like doBootstrap=, doGOF=, doLR=?!
          bootstrap = {testMask[c('bootstrap', 'lr', 'lr_pp')] <- TRUE},
-         gof = {testMask[c('pearson', 'moran', 'ad')] <- TRUE},
+         gof = {testMask[c('pearson', 'moran')] <- TRUE},
          moran = {testMask['moran'] <- TRUE},
          pearson = {testMask['pearson'] <- TRUE},
-         ad = {testMask['ad'] <- TRUE},
          lr = {testMask['lr'] <- TRUE},
          lr_pp = {testMask['lr_pp'] <- TRUE},
          stop('This type of tests is not supported!')
@@ -218,22 +220,22 @@ test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("
   # High values of the test statistic speak in favour of H1:
   # @return list containing value of test statistic and null model fit. Or `NULL` in case of trouble.
   testStat <- function(x, y) {
-    fit0 <- delay_model(x = x, y = y, distribution = distribution, method = 'MSE', ties = ties, bind = param)
-    fit1 <- delay_model(x = x, y = y, distribution = distribution, method = 'MSE', ties = ties)
+    fit0 <- delay_model(x = x, y = y, distribution = distribution, method = 'MPSE', ties = ties, bind = param)
+    fit1 <- delay_model(x = x, y = y, distribution = distribution, method = 'MPSE', ties = ties)
 
     if (is.null(fit0) || is.null(fit1)) return(invisible(NULL))
 
-    # if more restricted model fit0 yields better fit (=lower criterion) than more general fit1
+    # if the more restricted model (fit0) yields better fit (=lower criterion) than the more general model (fit1)
     #+we are in trouble, possibly due to non-convergence, e.g. convergence code 52
     #+we refit the general fit1 again using parameter-values from fit0
-    if ( fit0[['val']] + TOL_CRIT < fit1[['val']] ){
-      warning('Restricted model with better fit than unrestricted model.', call. = FALSE)
+    if ( fit0[['val']] + TOL_CRIT < fit1[['val']] &&
+         !is.null(fit1oa <- purrr::pluck(fit1, 'optimizer', 'optim_args')) ){
+      if (verbose > 0) warning('Restricted model with better fit than unrestricted model.', call. = FALSE)
       # re-run fit1 with start values based on fitted parameters of reduced model fit0
-      fit1oa <- attr(fit1[['objFun']], 'optim_args', exact = TRUE)
       stopifnot( is.list(fit1oa), 'par' %in% names(fit1oa) )
 
-      # QQQ does match() or pmatch help here to avoid for-loop?
       pn1 <- names(fit1[['par']])
+      # Would match() or pmatch() help avoid the for-loop?
       for (na0 in names(fit0[['par']])) fit1oa[['par']][startsWith(pn1, prefix = na0)] <- coef(fit0)[[na0]]
 
       # we allow only for non-negative parameters
@@ -245,7 +247,10 @@ test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("
 
       fit1 <- update.incubate_fit(fit1, optim_args = fit1oa)
 
-      if (is.null(fit1) || fit0[['val']] + TOL_CRIT < fit1[['val']]) return(invisible(NULL))
+      if (is.null(fit1) || fit0[['val']] + TOL_CRIT < fit1[['val']]) {
+        warning('Restricted model with better fit than unrestricted model even after refit of the unrestricted model!', call. = FALSE)
+        return(invisible(NULL))
+      }
     }# fi bad fit1
 
     # convergence of re-fits?
@@ -256,13 +261,13 @@ test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("
     # higher values of T speak in favour of H1:
     #   1. fit0 has high value (=bad fit)
     #   2. fit1 has low value (=good fit)
-    list(val = -2L * (fit1[["val"]] - fit0[["val"]]),
+    list(val = 2L * max(0L, fit0[["val"]] - fit1[["val"]]),
          fit0 = fit0, fit1 = fit1)
-  }
+  } #fn testStat
 
   # observed test statistic
   ts_obs <- testStat(x, y)
-  if (is.null(ts_obs)){
+  if ( is.null(ts_obs) || ! is.list(ts_obs) || ! is.numeric(ts_obs[['val']]) || ts_obs[['val']] < -TOL_CRIT ){
     stop("Delay model failed for restricted null-model or free full model", call. = FALSE)
   }
   fit0 <- ts_obs[["fit0"]]
@@ -284,11 +289,6 @@ test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("
   # under H0, expect counts according to uniform distribution
   GOF_pears0 <- if (testMask[['pearson']]) test_GOF(delayFit = fit0, method = 'pearson')
   GOF_pears1 <- if (testMask[['pearson']]) test_GOF(delayFit = fit1, method = 'pearson')
-
-  # EDF-based GOF-test
-  # Anderson-Darling (AD) test statistic, cf Stephens, Tests based on EDF Statistics p.101, (4.2)
-  GOF_ad0 <- if (testMask[['ad']]) test_GOF(delayFit = fit0, method = 'AD')
-  GOF_ad1 <- if (testMask[['ad']]) test_GOF(delayFit = fit1, method = 'AD')
 
 
 
@@ -323,11 +323,11 @@ test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("
     if (verbose > 0L){
       stopifnot( NROW(t0_dist) == 2L )
       fit0_conv <- t0_dist[2L,]
-      cat(glue::glue(
-        'Proportion of model failures: {scales::percent(length(which(is.na(fit0_conv)))/length(fit0_conv), accuracy = .1)}',
-        'Proportion of conv =  0: {scales::percent(length(which(fit0_conv == 0))/ length(fit0_conv), accuracy = .1)}',
-        'Proportion of conv = 52: {scales::percent(length(which(fit0_conv == 52))/length(fit0_conv), accuracy = .1)}\n',
-        .sep = '\n'))
+      cat(glue(
+        'Proportion of model failures: {as_percent(length(which(is.na(fit0_conv)))/length(fit0_conv))}',
+        'Proportion of conv =  0: {as_percent(length(which(fit0_conv == 0))/ length(fit0_conv))}',
+        'Proportion of conv = 52: {as_percent(length(which(fit0_conv == 52))/length(fit0_conv))}',
+        .sep = '\n'), '\n')
       t0_dist <- t0_dist[1L,] #retain only ts_boot[['val']]
     }
     t0_dist <- t0_dist[is.finite(t0_dist)]
@@ -358,15 +358,13 @@ test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("
       R = if (testMask[['bootstrap']]) length(t0_dist),
       chisq_df_hat = chisq_df_hat,
       param = param,
-      P = purrr::compact(
+      P = purrr::compact( # compact = cleanse NULL entries
         list(
           bootstrap = P_boot,
           moran = as.vector(GOF_mo0$p.value),
           moran1 = as.vector(GOF_mo1$p.value),
           pearson = as.vector(GOF_pears0$p.value),
           pearson1 = as.vector(GOF_pears1$p.value),
-          ad = as.vector(GOF_ad0$p.value),
-          ad1 = as.vector(GOF_ad1$p.value),
           lr = P_lr,
           lr_pp = P_lr_pp
         )
@@ -377,11 +375,10 @@ test_diff <- function(x, y=stop('Provide data for group y!'), distribution = c("
 #' @export
 print.incubate_test <- function(x, ...){
   params <- paste(x$param, collapse = ' & ')
-  cat('Test for difference in parameter ', params, 'between two groups.\n')
-  cat('Alternative hypothesis: ', params, 'are different between the two groups.\n')
   P_boot_str <- if (is.numeric(x$P$bootstrap)) format.pval(x$P$bootstrap) else '-'
-  cat('Parametric Bootstrap P-value: ', P_boot_str)
-  cat('\n')
+  cat(glue("Test for difference in parameter{'s'[length(x$param) > 1]} {params} between two groups.",
+           "Alternative hypothesis: {params} {c('is', 'are')[[1L + (length(x$param) > 1)]]} different between the two groups.",
+           "Parametric Bootstrap P-value: {P_boot_str}", .sep = "\n"), '\n')
 }
 
 
@@ -389,24 +386,28 @@ print.incubate_test <- function(x, ...){
 plot.incubate_test <- function(x, y, title, subtitle, ...){
   stopifnot(inherits(x, "incubate_test"))
 
-  teststat <- x[["testDist"]]
+  rlang::check_installed(pkg = 'ggplot2', reason = 'to get plots', version = '3.3')
 
-  if (is.null(teststat)) {
+  testDist <- x[["testDist"]]
+
+  if (is.null(testDist)) {
     message('No bootstrap test to visualize.')
     return(invisible(NULL))
   }
 
-  if (missing(title)) title <- glue::glue('Distribution of test statistic under H0 for parameter {dQuote(x$param)}')
+  R <- purrr::pluck(x, "R", .default = "-")
+
+  if (missing(title)) title <- glue("Distribution of test statistic under H0 for parameter {paste(x$param, collapse = ' & ')}")
   if (missing(subtitle) && ! is.null(x$P$bootstrap)){
-    subtitle <- glue::glue('Sampling distribution, based on {length(teststat)} parametric bootstrap draws. ',
-                           'Bootstrap P-value = {format.pval(x$P$bootstrap, eps = 1e-3)}')
-  #"Approximated by a chi-square distribution with df={signif(x[['chisq_df_hat']], 2)}.")
+    subtitle <- glue('Sampling distribution, based on {R} parametric bootstrap draws. ',
+                     'Bootstrap P-value = {format.pval(x$P$bootstrap, eps = 1e-3)}')
+    #"Approximated by a chi-square distribution with df={signif(x[['chisq_df_hat']], 2)}.")
   }
 
 
-  p <- ggplot2::ggplot(tibble::tibble(teststat = teststat),
-                       mapping = ggplot2::aes_(x = ~teststat, y = ~ggplot2::after_stat(density))) +
-    ggplot2::geom_histogram(bins = 11L + ceiling(sqrt(length(teststat))))
+  p <- ggplot2::ggplot(tibble::tibble(testDist = testDist),
+                       mapping = ggplot2::aes_(x = ~testDist, y = ~ggplot2::after_stat(density))) +
+    ggplot2::geom_histogram(bins = 11L + ceiling(sqrt(R)))
 
   # extract maximum density value
   ymax <- max(ggplot2::layer_data(p)[['y']])
@@ -452,17 +453,16 @@ plot.incubate_test <- function(x, y, title, subtitle, ...){
 #' @param R integer. Number of bootstrap samples for test of difference in parameter within each power simulation. It affects the resolution of the P-value for each simulation round. A value of around `R=200` gives a resolution of 0.5% which might be enough for power analysis.
 #' @param nRange integer. Admissible range for sample size when power is pre-specified and sample size is requested.
 #' @return List of results of power simulation. Or `NULL` in case of errors.
-#' @importFrom rlang .data
 #' @export
 power_diff <- function(distribution = c("exponential", "weibull"), param = "delay",
-                       test = c('bootstrap', 'pearson', 'moran', 'ad', 'lr', 'lr_pp'),
+                       test = c('bootstrap', 'pearson', 'moran', 'lr', 'lr_pp'),
                        eff = stop("Provide parameters for both group that reflect the effect!"),
                        n = NULL, r = 1, sig.level = 0.05, power = NULL, nPowerSim = 1600, R = 201,
                        nRange = c(5, 50)){
 
   tol <- .001
   distribution <- match.arg(distribution)
-  test <- match.arg(test)
+  test <- match.arg(arg = tolower(test))
   ranFun <- getDist(distribution, type = "r")
   par_names <- getDist(distribution, type = "param")
   param <- match.arg(param, choices = par_names)
@@ -558,7 +558,7 @@ power_diff <- function(distribution = c("exponential", "weibull"), param = "dela
     NBR_CAND1 <- length(nx_cand1)
     pow_cand1 <- rep_len(-1, length.out = NBR_CAND1)
 
-    # if single n remain, return the power for it (no search for n necessary)
+    # if single n remains, return the power for it (no search for n necessary)
     if (NBR_CAND1 == 1L) return(power_diff(distribution, param, test, eff,
                                            n = nx_cand1[[1L]], power = NULL,
                                            r = r, sig.level = sig.level,nPowerSim = nPowerSim, R = R))
@@ -595,8 +595,8 @@ power_diff <- function(distribution = c("exponential", "weibull"), param = "dela
 
     # check last iteration
     if (i1 == NBR_CAND1 && pow_cand1[[NBR_CAND1]] > -1 && pow_cand1[[NBR_CAND1]] < power - tol){
-      warning(glue::glue('Failed to reach requested power with maximally allowed n: {nx_cand1[[NBR_CAND1]]} ',
-              'yields a power of {scales::percent(pow_cand1[[NBR_CAND1]], accuracy = .1)}.'))
+      warning(glue('Failed to reach requested power with maximally allowed n: {nx_cand1[[NBR_CAND1]]} ',
+                   'yields a power of {as_percent(pow_cand1[[NBR_CAND1]])}.'))
       REFINE <- FALSE
     }
 

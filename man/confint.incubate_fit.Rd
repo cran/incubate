@@ -2,7 +2,7 @@
 % Please edit documentation in R/delay_estimation.R
 \name{confint.incubate_fit}
 \alias{confint.incubate_fit}
-\title{Confidence intervals for parameters of MPS-model fits.}
+\title{Confidence intervals for parameters of incubate-model fits.}
 \usage{
 \method{confint}{incubate_fit}(
   object,
@@ -10,11 +10,9 @@
   level = 0.95,
   R = 199L,
   bs_data,
-  bs_infer = c("logquantile", "quantile", "quantile0", "lognormal", "normal",
-    "normal0", "t", "t0"),
+  bs_infer = c("logquantile", "lognormal", "quantile", "quantile0", "normal",
+    "normal0"),
   useBoot = FALSE,
-  logshift_delay = 3,
-  smd_factor = 0.1,
   ...
 )
 }
@@ -33,10 +31,6 @@
 
 \item{useBoot}{logical. Delegate bootstrap confint calculation to the \code{boot}-package?}
 
-\item{logshift_delay}{numeric. Used for log-transforms only. Positive number what to add to delay fit distribution once the minimum has been subtracted. Then log is applied. Default is .01}
-
-\item{smd_factor}{numeric. How much should the delay parameter be smoothed? Only supported for parametric bootstrap. And only used if no \code{bs_data}- object is provided.}
-
 \item{...}{further arguments, currently not used.}
 }
 \value{
@@ -45,5 +39,5 @@ A matrix (or vector) with columns giving lower and upper confidence limits for e
 \description{
 Bias-corrected bootstrap confidence limits (either quantile-based or normal-approximation based) are generated.
 Optionally, there are also variants that use a log-transformation first.
-At least R=1000 bootstrap replications are recommended. Default are normal-based confidence intervals.
+At least R=1000 bootstrap replications are recommended. Default are quantile-based confidence intervals that internally use a log-transformation.
 }

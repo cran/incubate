@@ -2,7 +2,7 @@
 % Please edit documentation in R/delay_test.R
 \name{test_diff}
 \alias{test_diff}
-\title{Test the difference for delay model parameter(s) between two uncorrelated groups, based on maximum spacing estimation (MSE).}
+\title{Test the difference for delay model parameter(s) between two uncorrelated groups, based on maximum product of spacings estimation (MPSE).}
 \usage{
 test_diff(
   x,
@@ -10,8 +10,8 @@ test_diff(
   distribution = c("exponential", "weibull"),
   param = "delay",
   R = 400,
-  ties = c("equidist", "density", "random"),
-  type = c("all", "bootstrap", "gof", "moran", "pearson", "ad", "lr", "lr_pp"),
+  ties = c("density", "equidist", "random", "error"),
+  type = c("all", "bootstrap", "gof", "moran", "pearson", "lr", "lr_pp"),
   verbose = 0
 )
 }

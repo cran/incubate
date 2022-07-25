@@ -1,17 +1,19 @@
 
 #' Extract the parameters for the specified group.
 #'
+#' The parameters of the requested group are named using the canonical parameter names of the distribution.
+#'
 #' For a one-group setting or when `group=NULL` it simply returns the given parameter.
 #' This is an internal helper function
-#' used in `coef.incubate_fit` and in the factory method `geomSpaceFactory` below
-#' @param par named parameters (as simple vector or as list both work)
+#' used in [coef.incubate_fit()], [bsDataStep()] and in the factory method [objFunFactory()] below.
+#' @param par named parameters (as simple vector or as list)
 #' @param group character. Which group to extract parameters for?
-#' @param twoGr flag. Is it a two-group setting?
+#' @param twoGroup flag. Is it a two-group setting?
 #' @param oNames character. Original parameter names from distribution.
 #' @param bind character. Which parameters are bind together in a two-group setting?
-#' @return parameter vector for the relevant group
-getPars <- function(par, group = "x", twoGr, oNames, bind) {
-  if ( ! twoGr || is.null(group) ) return(par)
+#' @return named vector of parameters from the relevant group
+getPars <- function(par, group = "x", twoGroup, oNames, bind) {
+  if ( ! twoGroup || is.null(group) ) return(par)
 
   stopifnot( is.character(group), nzchar(group) )
 
@@ -25,38 +27,39 @@ getPars <- function(par, group = "x", twoGr, oNames, bind) {
   c(par.gr, par[bind])[oNames]
 }
 
-#' Factory Method for Negative Maximum Spacing Estimation (MSE) Objective Function
+
+#' Factory method for objective function, either according to maximum product of spacings estimation ('MPSE')
+#' or according to standard maximum likelihood estimation ('MLE0').
 #'
-#' Given the observed data this factory method produces an MSE objective function implementation
-#' which is the negative of the MSE-criterion H.
+#' Given the observed data this factory method produces an MPSE objective function implementation
+#' which is the negative of the MPSE-criterion H or the negative log-likelihood for MLE.
 #'
 #' @details
-#' From the observations, negative or infinite values are discarded.
+#' From the observations, negative or infinite values are discarded. In any case, the objective function is to be minimized.
 #'
 #' @param x numeric. observations
 #' @param y numeric. observations in second group.
+#' @param method character(1). Specifies the method for which to build the objective function. Default value is `MPSE`. `MLE0` is the standard MLE-method, calculating the likelihood function as the product of density values
 #' @param distribution character(1). delayed distribution family
 #' @param bind character. parameter names that are bind together (i.e. equated) between both groups
 #' @param ties character. How to handle ties within data of a group.
 #' @param verbose integer flag. How much verbosity in output? The higher the more output. Default value is 0 which is no output.
-#' @return An R-function that returns the negative MSE criterion for given choice of model parameters.
-geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull"), bind=NULL,
-                             ties=c('equidist', 'density', 'random', 'none'), verbose = 0L) {
+#' @return the objective function (e.g., the negative MPSE criterion) for given choice of model parameters or `NULL` upon errors
+objFunFactory <- function(x, y=NULL, method = c('MPSE', 'MLE0'), distribution = c("exponential", "weibull"), bind=NULL,
+                             ties=c('density', 'equidist', 'random', 'error'), verbose = 0L) {
 
   # setup ----
-  twoGr <- ! is.null(y)
-  stopifnot( is.numeric(x), length(x) > 0L, ! twoGr || is.numeric(y) && length(y) > 0L )
+  stopifnot( is.numeric(x), length(x) > 0L, is.null(y) || is.numeric(y) && length(y) > 0L )
+  method <- match.arg(method)
+  distribution <- match.arg(distribution)
   stopifnot( is.null(bind) || is.character(bind) && length(bind) >= 1L )
   ties <- match.arg(ties)
-  # tie-breaking via density is difficult for two-group situation
-  stopifnot( ties != 'density' || !twoGr )
+
 
   #standard ('original') names of distribution
   oNames <- getDist(distribution, type = "param", twoGroup = FALSE, bind = NULL)
   #bind: intersect with oNames enforces the canonical order of dist-parameters!
   bind <- intersect(oNames, bind)
-
-  distribution <- match.arg(distribution)
 
 
   # data preparation ----
@@ -65,6 +68,8 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
   # @param obs: data vector
   # @return sorted, cleaned up data vector or NULL in case of trouble
   preprocess <- function(obs) {
+
+    if ( is.null(obs) || ! is.numeric(obs)) return(NULL)
 
     ind_neg <- which(obs < 0L)
     if (length(ind_neg)){
@@ -83,8 +88,8 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
     if (is.null(obs)) return(NULL)
 
     # tie break
-    if (ties == 'density' || ties == 'none' ) return(obs) ##|| ties == 'groupedML') # groupedML not implemented yet
-
+    # || ties == 'groupedML') # groupedML not implemented yet
+    if ( startsWith(method, 'MLE') || ties == 'density' ) return(obs)
 
     diffobs <- diff(obs)
     stopifnot( all(diffobs >= 0L) ) # i.e. sorted obs
@@ -94,22 +99,25 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
     if (length(tiesDiffInd)){
       #rl <- rle(diff(tiesDiffInd))
       if (verbose > 0L){
-        cat(length(tiesDiffInd) + sum(diff(tiesDiffInd)>1L) + 1L, 'tied observations in',
-            sum(diff(tiesDiffInd)>1L) + 1L, #length(which(rl$values > 1L))+1L,
-            'group(s) within data vector.\n')
+        #length(which(rl$values > 1L))+1L,
+        cat(glue('{length(tiesDiffInd) + sum(diff(tiesDiffInd)>1L) + 1L} tied observations ',
+                 'in {sum(diff(tiesDiffInd)>1L) + 1L} group(s) within data vector.\n'))
       }
+
+      if ( ties == 'error' ) stop('Ties within data are not allowed!', call. = FALSE)
 
       roundOffPrecision <- estimRoundingError(obs, maxObs = 1000L)
       if (verbose > 0L){
-        cat("Round-off error has magnitude", roundOffPrecision, "\n")
+        cat(glue("Round-off error has magnitude {roundOffPrecision}\n"))
       }
+
 
       # rounding radius can't be wider than smallest observed diff.
       # plogis to mitigate the effect of sample size: the larger the sample the more we can 'trust' the observed minimal diff
       # obs[1L] = min(obs) = diff of minimal obs with 0
       rr <- .5 * min(stats::plogis(q = length(obs), scale = 11) * diffobs[which(diffobs > 0L)],
                      # rounding precision here
-                     roundOffPrecision, obs[1L], na.rm = TRUE)
+                     roundOffPrecision, obs[[1L]], na.rm = TRUE)
 
       ## modify tied observations per group of ties
       startInd <- endInd <- 1L
@@ -122,7 +130,7 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
         obs[obsInd] <- obs[obsInd] + if (ties == 'random') {
           # sort ensures that data after tie-break is still sorted from small to large
           sort(stats::runif(n = length(obsInd), min = -rr, max = +rr)) } else {
-            # ties == 'equidist'
+            stopifnot( ties == 'equidist' )
             # use evenly spaced observations to break tie as proposed by Cheng (1989) on Moran test statistic
             #+They first use the ties = 'density' approach for initial estimation of parameters for Moran's statistic
             seq.int(from = -rr, to = +rr, length.out = length(obsInd))
@@ -131,7 +139,9 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
         if ( startInd > length(tiesDiffInd) ) break
       } #repeat
 
-      if (verbose > 1L){ cat("New data: ", paste(obs, collapse = ", "), "\n")}
+      if (verbose > 1L && length(obs) < 50L ){
+        cat(glue("New data: {paste(obs, collapse = ', ')}\n"))
+      }
     } #fi tiesdiff
 
     # we have broken all ties
@@ -140,14 +150,35 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
     obs
   } #fn preprocess
 
+  # overwrite the data vectors with pre-processed data
   if (is.null({x <- preprocess(obs = x)})) return(invisible(NULL))
-  if (isTRUE(twoGr) && is.null({y <- preprocess(obs = y)})) return(invisible(NULL))
+  y <- preprocess(obs = y)
+
+  # do we have two groups after pre-processing?
+  twoGroup <- !is.null(y) && is.numeric(y) && length(y)
+
+
+  # checks ------------------------------------------------------------------
+
+  if (!twoGroup && !is.null(bind)) warning("bind= has a given non-null argument but it is ignored as we have only a single group!",
+                                           call. = FALSE)
+
+  if (startsWith(method, 'MLE') && twoGroup ) {
+    warning('MLE fitting is currently only supported for single group setting!', call. = FALSE)
+    return(invisible(NULL))
+  } # MLE
+
+
+  # check that there is enough data (here we also look at bind= if twoGroup)
+  if (!twoGroup && length(x) < length(oNames) || twoGroup && length(x) + length(y) < 2L * length(oNames) - length(bind) && min(length(x), length(y)) < length(oNames) - length(bind)) {
+    warning('Too few valid observations provided!', call. = FALSE)
+    return(invisible(NULL))
+  }
 
 
   # optimization arguments -----
   par_names <- getDist(distribution = distribution, type = "param",
-                       twoGroup = twoGr, bind = bind)
-
+                       twoGroup = twoGroup, bind = bind)
 
 
   # get start values for a group of observations
@@ -159,8 +190,8 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
 
     parV <- switch (EXPR = distribution,
                     # min(obs) = obs[1L]
-                    exponential = c( max(DELAY_MIN, obs[1L] - 2/length(obs)),
-                                     mean(obs - obs[1L] + 2/length(obs))**-1L ),
+                    exponential = c( max(DELAY_MIN, obs[[1L]] - 2/length(obs)),
+                                     mean(obs - obs[[1L]] + 2/length(obs))**-1L ),
                     weibull = {
                       # start values from 'Weibull plot'
                       #+using the empirical distribution function
@@ -179,7 +210,7 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
                       start_scale <- exp(mean(log(obs_f) - mean(start_y) / start_shape))
 
 
-                      c( max(DELAY_MIN, obs[1L] - 2/length(obs)),
+                      c( max(DELAY_MIN, obs[[1L]] - 2/length(obs)),
                          start_shape,
                          start_scale )
                     },
@@ -194,10 +225,10 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
 
 
   # parameter bounds: lower & upper
-  lowerVec <- upperVec <- purrr::set_names(rep(NA_real_, length(par_names)),
+  lowerVec <- upperVec <- purrr::set_names(rep_len(NA_real_, length(par_names)),
                                            nm = par_names)
 
-  PAR_LOW <- 1e-13
+  PAR_LOW <- sqrt(.Machine$double.eps)
   PAR_BOUNDS <- list(delay = c(lower = 0, upper = NA_real_),
                      rate  = c(lower = PAR_LOW, upper = +Inf),
                      shape = c(lower = PAR_LOW, upper = +Inf),
@@ -215,12 +246,12 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
 
   par0_x <- getParSetting.gr(x)
   parV <-
-    if (! twoGr) {
+    if (! twoGroup) {
       upperVec['delay'] <- par0_x[['delay_upper']]
       par0_x[['par']]
 
     } else {
-      stopifnot( twoGr )
+      stopifnot( twoGroup )
 
       # all parameters are bound
       if ( length(bind) == length(oNames) ) {
@@ -231,7 +262,7 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
         par0_xy[['par']]
 
 
-      } else { #twoGr, not all params bound!
+      } else { #twoGroup, not all params bound!
 
         par0_y <- getParSetting.gr(y)
 
@@ -252,7 +283,8 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
           if (is.null(bind)) c(start_x, start_y) else
             if (identical(bind, 'delay')) c(min(start_x[[1L]], start_y[[1L]]), start_x[-1L], start_y[-1L]) else
               # harmonic mean of rates (go towards higher variability setting)
-              if (identical(bind, 'rate')) c(2L * start_x[[2L]] * start_y[[2L]] / (start_x[[2L]] + start_y[[2L]]), start_x[-2L], start_y[-2L])
+              if (identical(bind, 'rate')) c(2L * start_x[[2L]] * start_y[[2L]] / (start_x[[2L]] + start_y[[2L]]),
+                                             start_x[-2L], start_y[-2L])
 
 
         } else {
@@ -286,18 +318,18 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
                   })
 
         } # weibull
-      } #twoGr, not all params bound!
+      } #twoGroup, not all params bound!
     } # twoGrp
 
   stopifnot( ! any(is.na(upperVec), is.na(lowerVec)) )
 
   optim_args <- list(
     par = parV,
+    method = "L-BFGS-B",
     lower = lowerVec,
     upper = upperVec,
-    method = "L-BFGS-B",
     # QQQ something like exp(trunc(log(par))) where par is the start parameters
-    control = list(parscale = pmin.int(1e11, pmax.int(1e-11, parV)))
+    control = list(parscale = pmin.int(1e11, pmax.int(sqrt(.Machine$double.eps), parV)))
   )
 
 
@@ -308,9 +340,12 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
   # log spacings:
   # calculate the differences in EDF (for given parameters in group) of adjacent observations on log scale
   # @return n+1 cumulative diffs on log-scale
-  getCumDiffs <- function(pars, group){
-    obs <- get(group)
-    pars.gr <- getPars(pars, group = group, twoGr = twoGr, oNames = oNames, bind = bind)
+  getCumDiffs <- function(pars, group) {
+    # get() would (by default) start looking in the execution environment of getCumDiffs and would find the object in its parent
+    # or: env = rlang::env_parent() # parent of caller env is (normally!?) the function-env
+    # or: env = rlang::fn_env(getCumDiffs) # referring directly to the function environment
+    obs <- rlang::env_get(env = rlang::env_parent(rlang::current_env(), n=1L), nm = group, inherit = FALSE)
+    pars.gr <- getPars(pars, group = group, twoGroup = twoGroup, oNames = oNames, bind = bind)
 
     # calculate spacings
     # contract: data is sorted!
@@ -324,7 +359,7 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
     #+because cumDiffs can be 0 even if obs are different, in particular for non-suitable parameters!
     ind_t <- which(diff(obs) == 0L)
     if ( length(ind_t) ){
-      stopifnot( ties == 'density' ) # other tie-strategies have already dealt with ties in preprocess
+      stopifnot( ties == 'density' ) # other tie-strategies have already dealt with ties in *preprocess*
       # increase index by 1 to get from diff(obs)-indices to cumDiffs-indices
       cumDiffs[1L+ind_t] <- purrr::exec(getDist(distribution, type = "dens"), !!! c(list(x = obs[ind_t]), pars.gr))
     } #fi
@@ -337,48 +372,60 @@ geomSpaceFactory <- function(x, y=NULL, distribution = c("exponential", "weibull
   }# fn getCumDiffs
 
 
-  # negative maximum spacing estimation objective function.
+  # objective function like negative mean log-spacings for MPSE
   # Estimate parameters by minimizing this function.
-  # `pars` a the parameter vector.
+  # `pars` the parameter vector.
   # `aggregated` a logical flag. For two group case, `FALSE` returns individual mean log cum-diffs per group
-  negMSE <- function(pars, aggregated = TRUE){
+  objFun <- function(pars, aggregated = TRUE) {
     stopifnot( length(par_names) == length(pars) )
     pars <- purrr::set_names(pars, par_names)
 
-    - if (! twoGr) {
-      mean(getCumDiffs(pars, group = "x"))
-    } else {
-      #twoGr:
-      #the approach to first merge x and y and then do the cumDiffs, log and mean does *not* work out
-      #because the parameters should be optimized within group.
-      #merged data lead to frequent non-convergence or visually bad fits
-      res <- c(mean(getCumDiffs(pars, group = "x")), mean(getCumDiffs(pars, group = "y")))
+    switch(method,
+           MPSE = {
+             - if (! twoGroup) {
+               mean(getCumDiffs(pars, group = "x"))
+             } else {
+               #twoGroup:
+               #the approach to first merge x and y and then do the cumDiffs, log and mean does *not* work out
+               #because the parameters should be optimized within group.
+               #merged data lead to frequent non-convergence or visually bad fits
+               res <- c(mean(getCumDiffs(pars, group = "x")), mean(getCumDiffs(pars, group = "y")))
 
-      if (aggregated) stats::weighted.mean(res, w = c(length(x), length(y))) else res
-    }
-
+               if (aggregated) stats::weighted.mean(res, w = c(length(x), length(y))) else res
+             }
+           },
+           MLE0 = {
+             # MLE0 is currently only implemented for single group situation
+             stopifnot( ! twoGroup )
+             nObs <- length(x)
+             xc <- x - pars[['delay']]
+             - if (distribution == 'exponential')
+               nObs * (log(pars[['rate']]) - pars[['rate']] * mean(xc)) else
+                 nObs * (log(pars[['shape']]) - pars[['shape']] * log(pars[['scale']]) + (pars[['shape']]-1L) * mean(log(xc)) - mean(xc**pars[['shape']])/pars[['scale']]**pars[['shape']])
+           },
+           stop(glue('Objective function for method {method} is not implemented!'), call. = FALSE)
+    )
   }
 
-  # add preprocessed data as attribute
-  attr(negMSE, which = 'x') <- x
-  if (twoGr) { attr(negMSE, which = 'y') <- y}
-  # add "optim_args" & distribution as attributes to the objective function
-  attr(negMSE, which = "optim_args") <- c(list(fn = negMSE), optim_args) #optim_args
-  attr(negMSE, which = "distribution") <- distribution
-  attr(negMSE, which = "twoGroup") <- twoGr
-  # when bind is NULL there will be no attributed named 'bind'
-  attr(negMSE, which = "bind") <- bind
-  # method how to handle ties
-  attr(negMSE, which = "ties") <- ties
+  # attach analytical solution for MLE
+  if ( method == 'MLE0' && ! twoGroup && distribution == 'exponential' ){
+    attr(objFun, which = "opt") <- list(par = c(delay = x[[1L]], rate = 1L/(mean(x) - x[[1L]])),
+                                        value = length(x) * ( log(mean(x) - x[[1L]]) + 1L ),
+                                        convergence = 0L,
+                                        message = "analytic solution for standard MLE ('MLE0')",
+                                        counts = 1L)
+  }
 
-  negMSE
+  objFun
 }
 
 
-#' Parameter fitting according to MSE through numerical optimization.
+
+#' Fit optimal parameters according to the objective function (either MPSE or MLE0).
 #'
 #' The objective function carries the given data in its environment and it is to be minimized.
-#' R's standard routine `stats::optim` does the optimization, using numerical derivatives.
+#' R's standard routine `stats::optim` does the numerical optimization, using numerical derivatives.
+#' or the analytical solution is returned directly if available.
 #' @param objFun objective function to be minimized
 #' @param optim_args list of own arguments for optimization. If `NULL` it uses the default optim arguments associated to the objective function.
 #' @param verbose integer that indicates the level of verboseness. Default 0 is quiet.
@@ -387,54 +434,69 @@ delay_fit <- function(objFun, optim_args = NULL, verbose = 0) {
 
   if (is.null(objFun)) return(invisible(NULL))
   stopifnot( is.function(objFun) )
-  distribution <- attr(objFun, which = "distribution", exact = TRUE)
-  if (is.null(optim_args)) optim_args <- attr(objFun, which = "optim_args", exact = TRUE)
+  objFunEnv <- rlang::fn_env(objFun)
 
-  stopifnot( is.numeric(verbose), length(verbose) == 1L )
+  # check if there is already a solution provided by the objective function
+  optObj <- attr(objFun, which = "opt", exact = TRUE)
 
+  if ( is.list(optObj) && all( c('par', 'value', 'convergence') %in% names(optObj)) ){
+    if (verbose > 0L) cat("Using provided (analytical) solution to objective function.\n")
+  } else {
+    optObj <- NULL #start from scratch
+    # numeric optimization
+    if (verbose > 0L) message("Start with numeric optimziation of objective function.")
 
-  optObj <- NULL
+    if (is.null(optim_args)) optim_args <- rlang::env_get(objFunEnv, nm = "optim_args")
+    stopifnot( is.list(optim_args), 'par' %in% names(optim_args) )
+    # set objective function (overwrite entry 'fn' if it is already present)
+    optim_args[["fn"]] <- objFun
 
-  try(expr = {optObj <- purrr::exec(stats::optim, !!! optim_args)},
-      silent = TRUE)
+    # optim: 1st attempt
+    try({optObj <- purrr::exec(stats::optim, !!! optim_args)}, silent = TRUE)
 
-  if (is.null(optObj)){
-    if (verbose > 0L) warning("MSE-optimization failed during delay fit!", call. = FALSE)
-  } else if ( isTRUE(optObj$convergence > 0L) ){
-    # do a 2nd attempt of optim in case it did not converge in the first place
-    if (verbose > 1L) message("No proper convergence during 1st optimization in delay fit. Re-try with different parameter scaling.")
+    if (is.null(optObj)){
+      if (verbose > 0L) warning(glue("{rlang::env_get(env = objFunEnv, nm = 'method')}-optimization failed during model fit!"),
+                                call. = FALSE)
+    } else if ( isTRUE(optObj$convergence > 0L) ){
+      # do a 2nd attempt of optim in case it did not converge in the first place
+      if (verbose > 1L) message("No proper convergence during 1st optimization in delay fit. Re-try with different parameter scaling.")
 
-    stopifnot( "control"  %in% names(optim_args),
-               "parscale" %in% names(optim_args$control) )
+      # Use parameter values of non-converged fit as new start values (and adapt parscale accordingly)
+      #+The objFun is to be minimized,  smaller is better!
+      if ( isTRUE(is.numeric(optObj$par) && all(is.finite(optObj$par)) && optObj$value < objFun(optim_args$par)) ){
+        optim_args[['par']] <- optObj$par  # purrr::assign_in(where = "par", value = optObj$par)
 
-    # Use parameter values of non-converged fit as new start values (and adapt parscale accordingly)?
-    #+The objFun is to be minimized,  smaller is better!
-    if ( isTRUE(is.numeric(optObj$par) && all(is.finite(optObj$par)) && optObj$value < objFun(optim_args$par)) ){
-      optim_args[['par']] <- optObj$par  # purrr::assign_in(where = "par", value = optObj$par)
-      newparsc <- abs(optim_args[['par']])
-      newparsc[which(newparsc < 1e-7)] <- 1e-7
-      newparsc[which(newparsc > 1e8)] <- 1e8
-      optim_args[['control']][['parscale']] <- newparsc
+        if ( isTRUE("parscale" %in% names(optim_args[["control"]])) ){
+          newparsc <- abs(optim_args[['par']])
+          newparsc[which(newparsc < 1e-7)] <- 1e-7
+          newparsc[which(newparsc > 1e8)] <- 1e8
+          optim_args[['control']][['parscale']] <- newparsc
+        }
 
-      optObj <- NULL
-      try(expr = {optObj <- purrr::exec(stats::optim, !!! optim_args)},
-          silent = TRUE)
+        # optim: 2nd attempt
+        optObj <- NULL
+        try({optObj <- purrr::exec(stats::optim, !!! optim_args)}, silent = TRUE)
 
-      #XXX should we update the optim_args: start values when we used the default optim_args?
-      if ( is.null(optObj) || isTRUE(optObj$convergence > 0L && verbose > 0L) ) warning("No proper convergence after re-try.", call. = FALSE)
-    }## fi rescaling for 2nd attempt
-  }## fi 2nd attempt necessary?
+        if ( is.null(optObj) || isTRUE(optObj$convergence > 0L && verbose > 0L) ) warning("No proper convergence after re-try.",
+                                                                                          call. = FALSE)
+      }## fi rescaling for 2nd attempt
+    }## fi 2nd attempt necessary?
 
-  # set names to parameter vector
-  if (! is.null(optObj)){
-    optObj$par <- purrr::set_names(optObj$par,
-                                   nm = getDist(distribution, type = "param",
-                                                twoGroup = attr(objFun, which = "twoGroup", exact = TRUE),
-                                                bind = attr(objFun, which = "bind", exact = TRUE)))
-  }
+    # set names to parameter vector
+    if (! is.null(optObj)){
+      stopifnot( 'par' %in% names(optObj) )
+      # set canonical names for parameters
+      optObj$par <- purrr::set_names(optObj$par, rlang::env_get(env = objFunEnv, nm = "par_names"))
+      # save optim_args in optimization object (but w/o objective function)
+      optim_args$fn <- NULL
+      optObj <- append(optObj, values = list(optim_args = optim_args))
+    }
+  } #esle numeric optimization
 
   optObj
 }
+
+
 
 #' Fit a delayed Exponential or Weibull model to one or two given sample(s).
 #'
@@ -443,15 +505,20 @@ delay_fit <- function(objFun, optim_args = NULL, verbose = 0) {
 #' @param x numeric. observations of 1st group. Can also be a list of data from two groups.
 #' @param y numeric. observations from 2nd group
 #' @param distribution character. Which delayed distribution is assumed? Exponential or Weibull.
-#' @param method character. Which method to fit the model? MSE = maximum spacing estimation or MLE = maximum likelihood estimation
+#' @param method character. Which method to fit the model? 'MPSE' = maximum product of spacings estimation *or* 'MLE0' = standard maximum likelihood estimation
 #' @param bind character. parameter names that are bind together in 2-group situation.
 #' @param ties character. How to handle ties.
 #' @param optim_args list. optimization arguments to use. Use `NULL` to use the data-dependent default values.
 #' @param verbose integer. level of verboseness. Default 0 is quiet.
-#' @return `incubate_fit` object that contains the information of the delayed model fit. Or `NULL` if optimization failed (e.g. too few observations).
+#' @return `incubate_fit` the delay-model fit object. Or `NULL` if optimization failed (e.g. too few observations).
 #' @export
-delay_model <- function(x = stop('Specify observations in sample!'), y = NULL, distribution = c("exponential", "weibull"), method = c('MSE', 'MLE'), bind=NULL,
-                        ties=c('equidist', 'density', 'random'), optim_args=NULL, verbose = 0) {
+delay_model <- function(x = stop('Specify observations!', call. = FALSE), y = NULL,
+                        distribution = c("exponential", "weibull"), method = c('MPSE', 'MLE0'),
+                        bind=NULL, ties=c('density', 'equidist', 'random', 'error'),
+                        optim_args=NULL, verbose = 0) {
+
+
+  # setup -------------------------------------------------------------------
 
   # unpack x if it is a list of two vectors
   if (is.list(x)){
@@ -460,64 +527,51 @@ delay_model <- function(x = stop('Specify observations in sample!'), y = NULL, d
     x <- x[[1L]]
   }
 
-  twoGr <- ! is.null(y)
+  # enforce that the first argument x= is properly instantiated
+  stopifnot( !is.null(x) && is.numeric(x) && length(x) )
+
   distribution <- match.arg(distribution)
+  method <- toupper(method)
+  if (length(method) == 1L && method == 'MSE') {
+    message("The method name 'MPSE' is prefered over 'MSE'!")
+    method <- 'MPSE'
+  }
   method <- match.arg(method)
   ties <- match.arg(ties)
 
-  if (method == 'MLE') {
-    if ( twoGr || distribution != 'exponential') {
-      warning('MLE fitting is currently only supported for single group delayed exponential!')
-      return(invisible(NULL))
-    }
+  if (is.logical(verbose)) verbose <- as.numeric(verbose)
+  if ( is.null(verbose) || ! is.numeric(verbose) || ! is.finite(verbose) ) verbose <- 0
+  verbose <- verbose[[1L]]
 
-    #XXX pre-processing (NA & neg. values) is done in the geomSpaceFactory() -- this should be shared
-    return(structure(
-      list(
-        data = if (twoGr) list(x = x, y = y) else x,
-        distribution = distribution,
-        method = method,
-        twoGroup = twoGr,
-        bind = bind,
-        #objFun = objFun, ### neg. log-lik as objective function?!
-        par = c(delay = min(x), rate = 1/(mean(x) - min(x))),
-        val = - length(x) * ( log(mean(x) - min(x)) + 1L ), ## think here: taken from profiled likelihood. Is it generally correct?
-        optimizer = list(convergence = 0L, message = 'analytic solution for MLE')),
-      class = "incubate_fit"))
-  } # MLE
 
-  objFun <- geomSpaceFactory(x = x, y = y, distribution = distribution, bind = bind, ties = ties, verbose = verbose)
-  # set preprocessed data
-  x <- attr(objFun, 'x', exact = TRUE)
-  if (twoGr) { y <- attr(objFun, 'y', exact = TRUE)}
+  # objective function ------------------------------------------------------
 
+  objFun <- objFunFactory(x = x, y = y, method = method, distribution = distribution,
+                          bind = bind, ties = ties, verbose = verbose)
+  objFunEnv <- rlang::fn_env(objFun)
+
+  # optimise objective function
   optObj <- delay_fit(objFun, optim_args = optim_args, verbose = verbose)
 
   if (is.null(optObj)) return(invisible(NULL))
 
-  # get CDF-transformed data
-  oNames <- getDist(distribution, type = 'param')
-  data_tr <- purrr::exec(getDist(distribution, type = "cdf"),
-                         !!! c(list(q=x), getPars(par = optObj$par, group = 'x', twoGr = twoGr, oNames = oNames, bind = bind)))
-  if (twoGr){
-    data_tr <-
-      list(x = data_tr,
-           y = purrr::exec(getDist(distribution, type = "cdf"),
-                           !!! c(list(q=y), getPars(par = optObj$par, group = 'y', twoGr = twoGr, oNames = oNames, bind = bind))))
-  }
+  twoGroup <- rlang::env_get(env = objFunEnv, nm = "twoGroup")
+  # overwrite data with  pre-processed data
+  x <- rlang::env_get(env = objFunEnv, nm = "x")
+  y <- rlang::env_get(env = objFunEnv, nm = "y", default = NULL)
 
   structure(
     list(
-      data = if (twoGr) list(x = x, y = y) else x,
-      data_transf = data_tr, # store CDF-transformed data
+      data = if (twoGroup) list(x = x, y = y) else x,
       distribution = distribution,
       method = method,
-      twoGroup = twoGr,
+      twoGroup = twoGroup,
       bind = bind,
+      ties = ties,
       objFun = objFun,
       par = optObj$par,
       val = optObj$value, ##objFun(optObj$par),
-      optimizer = optObj[c('convergence', 'message', 'counts')]),
+      optimizer = purrr::compact(optObj[c('convergence', 'message', 'counts', 'optim_args')])),
     class = "incubate_fit")
 }
 
@@ -525,7 +579,7 @@ delay_model <- function(x = stop('Specify observations in sample!'), y = NULL, d
 print.incubate_fit <- function(x, ...){
   coe <- coef(x)
   cat(glue::glue_data(x, .sep = "\n",
-                      "Fit a delayed {distribution} through {c('Maximum Spacing Estimation (MSE)', 'Maximum Likelihood Estimation (MLE)')[[1L+(method=='MLE')]]} for {c('a single group', 'two independent groups')[[1L+twoGroup]]}.",
+                      "Fit a delayed {distribution} through {c('Maximum Product of Spacings Estimation (MPSE)', 'standard Maximum Likelihood Estimation (MLE0)')[[1L+(method=='MLE0')]]} for {c('a single group', 'two independent groups')[[1L+twoGroup]]}.",
                       "Data: {if (twoGroup) paste(lengths(data), collapse = ' and ') else length(data)} observations, ranging from {paste(signif(range(data), 4), collapse = ' to ')}",
                       "Fitted coefficients: {paste(paste('\n  ', names(coe)), signif(coe,5L), sep = ': ', collapse = ' ')}\n\n")
   )
@@ -536,12 +590,11 @@ print.incubate_fit <- function(x, ...){
 #' @param group character string to request the canonical parameter for one group
 #' @param ... further arguments, currently not used.
 #' @return named coefficient vector
-#' @importFrom stats coef
 #' @export
 coef.incubate_fit <- function(object, group = NULL, ...){
   #stopifnot( inherits(object, "incubate_fit") )
 
-  getPars(object[["par"]], group = group, twoGr = object[["twoGroup"]],
+  getPars(object[["par"]], group = group, twoGroup = object[["twoGroup"]],
           # use original parameter names of distribution
           oNames = getDist(object[["distribution"]], type = "param", twoGroup = FALSE, bind = NULL),
           # contract: bind was intersected with parameter names and, hence, has right order
@@ -560,34 +613,30 @@ summary.incubate_fit <- function(object, ...){
 #' @param verbose integer flag. Requested verbosity during `delay_fit`
 #' @param ... further arguments, currently not used.
 #' @return The updated fitted object of class `incubate_fit`
-#' @importFrom stats update
 #' @export
 update.incubate_fit <- function(object, optim_args, verbose = 0, ...){
 
-  objFun <- object[['objFun']]
+  stopifnot( all(c("objFun", "twoGroup", "data", "par", "val", "optimizer") %in% names(object)) )
 
   ## fit model with given optim_args
-  optObj <- delay_fit(objFun, optim_args = optim_args, verbose = verbose)
+  optObj <- delay_fit(object[["objFun"]], optim_args = optim_args, verbose = verbose)
 
   if (is.null(optObj)) return(invisible(NULL))
 
-  structure(
-    list(
-      data = object[['data']],
-      distribution = object[['distribution']],
-      twoGroup = object[['twoGroup']],
-      bind = object[['bind']],
-      objFun = objFun,
-      par = optObj$par,
-      val = optObj$value, ##objFun(optObj$par),
-      optimizer = optObj[c('convergence', 'message', 'counts')]
-    ), class = "incubate_fit")
+  # update all relevant fields in the list
+  object[c("par", "val", "optimizer")] <- list(par = optObj$par, val = optObj$value,
+                                               # drop NULLs from list (e.g. if optim_args is not present)
+                                               optimizer = purrr::compact(optObj[c("convergence", "message", "counts", "optim_args")]))
+
+  object
 }
 
 #' @export
 plot.incubate_fit <- function(x, y, title, subtitle, ...){
   stopifnot( inherits(x, "incubate_fit") )
   # parameter y comes from the plot-generic. y is not used here.
+
+  rlang::check_installed(pkg = 'ggplot2', reason = 'to get plots', version = '3.3')
 
   cumFun <- getDist(x[["distribution"]], type = "cdf")
 
@@ -634,11 +683,9 @@ plot.incubate_fit <- function(x, y, title, subtitle, ...){
 }
 
 
-#' @importFrom stats simulate
-#' @describeIn simulate Simulate from an `incubate`-model of class `incubate_fit`
 #' @export
 simulate.incubate_fit <- function(object, nsim = 1, seed = NULL, ...){
-  stopifnot( inherits(object, 'incubate_fit'))
+  stopifnot(inherits(object, 'incubate_fit'))
 
   ranFun <- getDist(object$distribution, type = "r")
   nObs <- if (isTRUE(object$twoGroup)) lengths(object$data) else length(object$data)
@@ -659,52 +706,114 @@ simulate.incubate_fit <- function(object, nsim = 1, seed = NULL, ...){
   }
 }
 
-#' Generate bootstrap distribution of fitted coefficients
+#' Generate bootstrap distribution of model parameters to fitted incubate model.
 #'
 #' Bootstrap data are here estimated coefficients from models fitted to bootstrap samples.
-#' These bootstrap data are used to make bootstrap inference in the second step.
+#' The bootstrap data is used to make bootstrap inference in the second step.
 #' It is an internal function, the main entry point is [confint.incubate_fit()].
 #' @param object an `incubate_fit`-object
 #' @param bs_data character. Which type of bootstrap method to generate data?
 #' @param R integer. Number of bootstrapped model coefficient estimates
 #' @param useBoot flag. Do you want to use the boot-package? Default value is `FALSE`.
-#' @param smd_factor numeric. smooth-delay factor: influence the amount of smoothing. Default is 0.025
+#' @param smd_factor numeric. smooth-delay factor: influence the amount of smoothing. 0 means no smoothing at all. Default is 0.25 (as was optimal in simulation for log-quantile together with log-delay-shift = 5)
 #' @return bootstrap data, either as matrix or of class `boot` (depending on the `useBoot`-flag)
-bsDataStep <- function(object, bs_data = c('parametric', 'ordinary'), R, useBoot = FALSE, smd_factor = 0){
+bsDataStep <- function(object, bs_data = c('parametric', 'ordinary'), R, useBoot = FALSE, smd_factor = 0.25) {
   bs_data <- match.arg(bs_data)
-  twoGr <- isTRUE(object$twoGroup)
+  stopifnot(is.numeric(R), length(R) == 1L, R > 1)
+  R <- ceiling(R)
   useBoot <- isTRUE(useBoot)
   stopifnot( is.numeric(smd_factor), length(smd_factor) == 1L, smd_factor >= 0L )
   smooth_delay <- isTRUE(smd_factor > 0L)
-  if (bs_data != 'parametric' && smooth_delay) {
+  ranFun <- getDist(object$distribution, type = "r")
+  dFun <- getDist(object$distribution, type = "d")
+  twoGroup <- isTRUE(object$twoGroup)
+  nObs <- if (twoGroup) lengths(object$data) else length(object$data)
+
+  if (smooth_delay && bs_data != 'parametric') {
     smooth_delay <- FALSE
     smd_factor <- 0L
-    #XXX make smooth_delay work also for ordinary?!
-    warning('Smoothing of delay is only implemented for parametric bootstrap!')
+    # how could smooth_delay work also for ordinary bootstrap?!
+    warning('Smoothing of delay is only implemented for parametric bootstrap!', call. = FALSE)
   }
-  # XXX make smooth_delay work also for Weibull?!
-  if (object$distribution == 'weibull' && smooth_delay) stop('Smoothing of delay is only implemented for the delayed exponential model!')
 
-  nObs <- if (twoGr) lengths(object$data) else length(object$data)
 
-  R <- ceiling(R)
+  # smooth delay: sample delay values according to objective function (where delay is varied and other parameters are kept fixed) in the vicinity of the estimated delay
+  # This reflects the certainty we have in the delay estimation. Low variability in data will lead to a quickly deteriorating objective function.
+  # return vector of length R with delay candidate values
+  getSMDCandidates <- function(group = 'x'){
+    obs <- if (twoGroup) object$data[[group]] else object$data
+    obs1 <- obs[[1L]]
+    del_coef <- coef(object, group = group)[['delay']]
 
-  # smooth delay parameters
-  SMD_DIV <- 3
-  SMD_MINRATE <- .03
+    # avoid smoothing if 1st observation or estimted delay is too close to zer0
+    if ( min(obs1, del_coef) < sqrt(.Machine$double.eps) ) return(rep_len(del_coef, length.out = R))
+
+    stopifnot( is.function(object$objFun) )
+
+    groupIdx <- 1L + (twoGroup && group == 'y')
+    coefVect <- coef(object) # objective function expects parameters for all involved groups
+    del_ind <- grep('delay', names(coefVect)) # indices of coefficients that involve delay, e.g. 'delay' or 'delay.x' or 'delay.y'
+    # in case of a delay per group ('delay.x' and 'delay.y') use the right one
+    if (length(del_ind) > 1L) del_ind <- del_ind[[groupIdx]]
+
+
+    # look at differences of first observations
+    obs_d <- diff(obs[seq_len(min(23L, nObs[[groupIdx]]))])
+    obs_d <- obs_d[is.finite(obs_d) & obs_d > 0L] #get rid of ties
+    obs_d <- if (! length(obs_d)) .0001 else min(obs_d)
+
+    # candidate region for delay parameters
+    #+min(..) ensures that we are not too close at obs1, otherwise for MLE we have only a single point
+    #+ del_coef - (obs1 - del_coef) = 2 * del_coef - obs1
+    del_interv <- c(low = max(0L, min(del_coef - (obs1 - del_coef), del_coef - obs_d,
+                                      obs1 - .0001, obs1 * .9999, na.rm = TRUE)),
+                    high = obs1)
+
+    #+areas for delay with high values of objective function are more likely to be sampled
+    #+candidate region: symmetric around coef_del as midpoint, up to smallest observed value
+    #+candidate region becomes finer sampled the broader the interval is
+    #+point estimate for delay is part of sample (if lower bound is not cut to be 0, via max in from= argument)
+    delayCandDF <- tibble(delay = seq.int(from = del_interv[['low']], to = del_interv[['high']],
+                                          # uneven number of grid points (hence, MPSE-estimate for delay will be one of the grid points)
+                                          # grid step width at most 0.005
+                                          length.out = max(997L, 2L * min(ceiling(R/2), 100L*ceiling(diff(del_interv)))+1L)),
+                          # fixing the parameter estimates other than delay
+                          objVal = purrr::map_dbl(.x = .data[["delay"]],
+                                                  .f = ~ object$objFun(pars = replace(coefVect, del_ind, .x),
+                                                                       aggregated = FALSE)[[groupIdx]]))
+
+      # we like to drop last entry (delay = 1st observation) as objective function tends to explode
+      # but we have to keep last entry if it corresponds to the delay estimate (e.g., as is the case for MLE0-fitting)
+    if (delayCandDF$delay[NROW(delayCandDF)] > del_coef) delayCandDF <- delayCandDF[-NROW(delayCandDF),, drop = FALSE]
+    # relative change to optimal value, will be negative as objective function is minimized
+    delayCandDF$objValInv <- (object$val - delayCandDF$objVal) / (object$val+.01)
+    # shift upwards into non-negative area
+    delayCandDF$objValInv <- delayCandDF$objValInv - min(delayCandDF$objValInv, na.rm = TRUE)
+    # scale to be between 0 and 1
+    delayCandDF$objValInv <- (delayCandDF$objValInv / (max(delayCandDF$objValInv, na.rm = TRUE) + .01))**(1L/(smd_factor+.01))
+    delayCandDF$cumSum0 <- cumsum(delayCandDF$objValInv)
+    # scale cumSum0 to 1.
+    delayCandDF$cumSum <- delayCandDF$cumSum0 / max(delayCandDF$cumSum0)
+    # lag-1: have it start with 0 and end with a single 1 (the last objValInv is most often 0 as)
+    delayCandDF$cumSum <- c(0L, delayCandDF$cumSum[-NROW(delayCandDF)])
+
+    # rightmost.closed = TRUE for the unlikely/impossible?! case that we draw a 1 by runif
+    delayCandDF$delay[findInterval(x = stats::runif(R), vec = delayCandDF$cumSum, rightmost.closed = TRUE)]
+  }
+
+  delayCandX <- if (smooth_delay) getSMDCandidates(group = 'x')
+  delayCandY <- if (smooth_delay && twoGroup) getSMDCandidates(group = 'y')
 
   if (useBoot) {
-    stopifnot(!twoGr) # for the time being only single group calls are supported!
+    stopifnot(!twoGroup) # for the time being only single group calls are supported!
     boot::boot(data = object$data,
                statistic = function(d, i) coef(delay_model(x=d[i], distribution = object$distribution,
+                                                           ties = object$ties,
                                                            method = object$method, bind = object$bind)),
                sim = bs_data, mle = coef(object), R = R,
                ran.gen = function(d, coe){ # ran.gen function is only used for parametric bootstrap
-                 ranFun <- getDist(object$distribution, type = "r")
                  if (smooth_delay){
-                   # use rectified normal
-                   coe[['delay']] <- abs(coe[['delay']] - max(0L, stats::rnorm(1L, mean = 0L,
-                                                                               sd = min(coe[['delay']]/SMD_DIV, smd_factor/(SMD_MINRATE + coe[['rate']])))))
+                   coe[['delay']] <- delayCandX[sample.int(n = R, size = 1L)]
                  }
                  rlang::exec(ranFun, !!! as.list(c(n=nObs[[1L]], coe)))
                })
@@ -714,60 +823,58 @@ bsDataStep <- function(object, bs_data = c('parametric', 'ordinary'), R, useBoot
     # get coefficients from bootstrapped data
     #+(either by ordinary bootstrap of data or by parametric bootstrap)
     coefFun <- switch(bs_data,
-                      ordinary = function(dummy){
+                      ordinary = function(dummy) {
                         # draw bootstrap samples from the data
-                        x <- (if (twoGr) object$data$x else object$data)[sample.int(n = nObs[[1L]], replace = TRUE)]
-                        y <- if (twoGr) object$data$y[sample.int(n = nObs[[2L]], replace = TRUE)]
+                        x <- (if (twoGroup) object$data$x else object$data)[sample.int(n = nObs[[1L]], replace = TRUE)]
+                        y <- if (twoGroup) object$data$y[sample.int(n = nObs[[2L]], replace = TRUE)]
 
-                        coef(delay_model(x=x, y=y, distribution = object$distribution, method = object$method, bind = object$bind))
+                        coef(delay_model(x=x, y=y, distribution = object$distribution,
+                                         ties = object$ties,
+                                         method = object$method, bind = object$bind))
                       },
                       parametric = {
                         # generate data from the fitted model
-                        # for performance reasons, we 'inline' the simulate code, cf test_diff
-                        ranFun <- getDist(object$distribution, type = "r")
+                        # for performance reasons, we 'inline' the simulate code, cf. test_diff
 
                         # arguments to the random function generation
                         ranFunArgsX <- as.list(c(n=nObs[[1L]], coef(object, group = "x")))
-                        ranFunArgsY <- if (twoGr) as.list(c(n=nObs[[2L]], coef(object, group = "y")))
+                        ranFunArgsY <- if (twoGroup) as.list(c(n=nObs[[2L]], coef(object, group = "y")))
 
-
-                        function(dummy){
+                        function(ind) {
                           if (smooth_delay){
-                            #densFun <- getDist(object$distribution, type = 'd') #more generally, use density at delay+small value?
-                            # use rectified Gaussian
-                            ranFunArgsX[['delay']] <- abs(ranFunArgsX[['delay']] - max(0L, stats::rnorm(1L, mean = 0L,
-                                                                                                        sd = min(ranFunArgsX[['delay']]/SMD_DIV, smd_factor/(SMD_MINRATE + ranFunArgsX[['rate']])))))
-                            if (twoGr) ranFunArgsY[['delay']] <- abs(ranFunArgsY[['delay']] - max(0L, stats::rnorm(1L, mean = 0L,
-                                                                                                                   sd = min(ranFunArgsY[['delay']]/SMD_DIV, smd_factor/(SMD_MINRATE + ranFunArgsY[['rate']])))))
+                            #+smooth delay according to how sure are we about the delay-estimate:
+                            #+the more sure the smaller is the smoothing
+                            ranFunArgsX[['delay']] <- delayCandX[ind]
+                            if (twoGroup) ranFunArgsY[['delay']] <- delayCandY[ind]
                           }
 
                           # cf simulate (but inlined here for performance reasons)
                           x <- rlang::exec(ranFun, !!! ranFunArgsX)
-                          y <- if (twoGr) rlang::exec(ranFun, !!! ranFunArgsY)
+                          y <- if (twoGroup) rlang::exec(ranFun, !!! ranFunArgsY)
 
-                          coef(delay_model(x=x, y=y, distribution = object$distribution, method = object$method, bind = object$bind))
+                          coef(delay_model(x=x, y=y, distribution = object$distribution,
+                                           ties = object$ties,
+                                           method = object$method, bind = object$bind))
                         }
                       },
                       stop('Unkown bootstrap data generation type!')
     )
 
-    future.apply::future_vapply(X = seq.int(R), FUN.VALUE = double(length(coef(object))),
+    future.apply::future_vapply(X = seq_len(R), FUN.VALUE = double(length(coef(object))),
                                 FUN = coefFun, future.seed = TRUE)
 
     # more clear and shorter but less efficient!
     # future.apply::future_vapply(simulate(object, nsim = R), FUN.VALUE = double(length(cf)),
-    #                             FUN = function(da){
-    #                               coef(delay_model(x=da, distribution = object$distribution, bind = object$bind))
-    #                             })
+    #  FUN = \(d) coef(delay_model(x=d, distribution = object$distribution, ties = object$ties, method = object$method, bind = object$bind)))
 
   }
 }
 
-#' Confidence intervals for parameters of MPS-model fits.
+#' Confidence intervals for parameters of incubate-model fits.
 #'
 #' Bias-corrected bootstrap confidence limits (either quantile-based or normal-approximation based) are generated.
 #' Optionally, there are also variants that use a log-transformation first.
-#' At least R=1000 bootstrap replications are recommended. Default are normal-based confidence intervals.
+#' At least R=1000 bootstrap replications are recommended. Default are quantile-based confidence intervals that internally use a log-transformation.
 #' @param object object of class `incubate_fit`
 #' @param parm character. Which parameters to get confidence interval for?
 #' @param level numeric. Which is the requested confidence level for the interval? Default value is 0.95
@@ -775,34 +882,32 @@ bsDataStep <- function(object, bs_data = c('parametric', 'ordinary'), R, useBoot
 #' @param bs_data character or bootstrap data object. If character, it specifies which type of bootstrap is requested and the bootstrap data will be generated. Data can also be provided here directly. If missing it uses parametric bootstrap.
 #' @param bs_infer character. Which type of bootstrap inference is requested to generate the confidence interval?
 #' @param useBoot logical. Delegate bootstrap confint calculation to the `boot`-package?
-#' @param logshift_delay numeric. Used for log-transforms only. Positive number what to add to delay fit distribution once the minimum has been subtracted. Then log is applied. Default is .01
-#' @param smd_factor numeric. How much should the delay parameter be smoothed? Only supported for parametric bootstrap. And only used if no `bs_data`- object is provided.
 #' @param ... further arguments, currently not used.
 #' @return A matrix (or vector) with columns giving lower and upper confidence limits for each parameter.
 #' @export
 confint.incubate_fit <- function(object, parm, level = 0.95, R = 199L,
-                                 bs_data, bs_infer = c('logquantile', 'quantile', 'quantile0', 'lognormal', 'normal', 'normal0', 't', 't0'),
-                                 useBoot=FALSE, logshift_delay = 3, smd_factor = 0.1,...){
+                                 bs_data, bs_infer = c('logquantile', 'lognormal', 'quantile', 'quantile0', 'normal', 'normal0'),
+                                 useBoot=FALSE, ...){
   stopifnot(inherits(object, 'incubate_fit'))
   stopifnot(is.numeric(level), length(level) == 1L, level < 1L, level > 0L)
   stopifnot(is.numeric(R), length(R) == 1L, R > 0)
   if (missing(bs_data)) bs_data <- 'parametric'
-  if (is.vector(bs_data) && is.character(bs_data)) bs_data <- match.arg(bs_data, choices = c('parametric', 'ordinary'))
-  stopifnot(logshift_delay > 0, smd_factor >= 0)
+  if (is.vector(bs_data) && is.character(bs_data)) bs_data <- match.arg(bs_data[[1L]], choices = c('parametric', 'ordinary'))
+  bs_infer <- match.arg(bs_infer)
+  logTransform <- isTRUE(startsWith(bs_infer, 'log'))
 
-  twoGr <- isTRUE(object$twoGroup)
-  nObs <- if (twoGr) lengths(object$data) else length(object$data)
+  twoGroup <- isTRUE(object$twoGroup)
+  nObs <- if (twoGroup) lengths(object$data) else length(object$data)
 
   useBoot <- isTRUE(useBoot) || inherits(bs_data, 'boot')
 
   genBootstrapData <- is.character(bs_data) && length(bs_data == 1L) && ! is.na(bs_data) && nzchar(bs_data)
   stopifnot( genBootstrapData || useBoot && inherits(bs_data, 'boot') || is.matrix(bs_data) )
 
-  bs_infer <- match.arg(bs_infer)
 
   # check if we can really use boot
   if ( useBoot &&
-       (! requireNamespace("boot", quietly = TRUE) || twoGr || ! bs_infer %in% c('normal', 'lognormal', 'quantile', 'logquantile', 'quantile0')) ) {
+       (! requireNamespace("boot", quietly = TRUE) || twoGroup || ! bs_infer %in% c('normal', 'lognormal', 'quantile', 'logquantile', 'quantile0')) ) {
     warning('Using own implementation as package', sQuote('boot'), 'is not available or scenario not implemented.',
             call. = FALSE)
     useBoot <- FALSE
@@ -810,7 +915,7 @@ confint.incubate_fit <- function(object, parm, level = 0.95, R = 199L,
 
   cf <- coef(object)
   pnames <- names(cf)
-  stopifnot( is.numeric(cf), is.character(pnames) )
+  stopifnot( is.numeric(cf), is.character(pnames), nzchar(pnames), length(cf) == length(pnames) )
 
   if (missing(parm)) parm <- pnames else
     if (is.numeric(parm)) parm <- pnames[parm]
@@ -828,22 +933,27 @@ confint.incubate_fit <- function(object, parm, level = 0.95, R = 199L,
 
   # if not already provided get bootstrap data (i.e. coefficients) from fitted model to bootstrapped observations
   if (genBootstrapData) {
-    bs_data <- bsDataStep(object = object, bs_data = bs_data, R = R, useBoot = useBoot, smd_factor = smd_factor)
+    bs_data <- bsDataStep(object = object, bs_data = bs_data, R = R, useBoot = useBoot)
     if (R < 999) warning('Be cautious with the confidence interval(s) because the number of bootstrap samples R is rather low (R<999).',
                        call. = FALSE)
   }
   stopifnot( ! is.vector(bs_data) && ! is.character(bs_data) )
-  # set R according to the provided bs_data (in particular important when R & bs_data object is given)
+  # set R according to the provided bs_data (in particular important when both R & bs_data object are given)
   R <- if (useBoot) bs_data[['R']] else NCOL(bs_data)
 
 
-  logTransform <- isTRUE(startsWith(bs_infer, 'log'))
-  # standard value for all parameters
-  logshift <- purrr::set_names(rep_len(.0001, length.out=length(cf)), nm = names(cf))
-  # for delay, the transformation needs to be independent of the scale of delay.
-  if (logTransform && ('delay' %in% pnames))
-    logshift['delay'] <- -min(if (useBoot) bs_data$t[,which('delay' == names(cf))] else bs_data['delay',], na.rm = TRUE) + logshift_delay
-
+  # logShift: needed only when log-transformation is requested. Start with standard value for all parameters
+  logshift <- purrr::set_names(rep_len(.0001, length.out=length(pnames)), nm = pnames)
+  # for delay, the transformation needs to be independent of the scale of delay, so we subtract the minimum and add a shift
+  #+use fixed logshift_delay = 5 (which performed well in simulation at single group, exponential distribution, together with smd=0.25)
+  if (logTransform){
+    LOGSHIFT_DELAY <- 5
+    for (i in which(startsWith(pnames, 'delay'))){
+      logshift[i] <- -min(if (useBoot) bs_data$t[,i] else bs_data[i,], na.rm = TRUE) + LOGSHIFT_DELAY
+      # using low quantiles would make it less dependent on R but then we needed to check that x-logshift remains positive (for log)
+      #stats::quantile(..i.., probs = c(0, 0.001), na.rm = TRUE, names = FALSE) # catch when diff() > LOGSHIFT_DELAY
+    }#rof
+  }#fi
 
   # do bootstrap inference on bootstrap data
   ci <- if (useBoot) {
@@ -923,14 +1033,6 @@ confint.incubate_fit <- function(object, parm, level = 0.95, R = 199L,
              -logshift + exp(
                t(c(1L, 1L) %o% (2L * log(cf + logshift) - .rowMeans(bs_data_h, m = length(cf), n = R)) + stats::qnorm(a) %o% apply(bs_data_h, 1L, stats::sd)))
            }),
-           t0 = {
-             t(c(1L, 1L) %o% .rowMeans(bs_data, m = length(cf), n = R) + stats::qt(a, df = sum(nObs)-length(cf)+3L) %o% apply(bs_data, 1L, stats::sd))
-           },
-           t = {
-             # we actually estimate the variance quite accurately through the high number of bootstrap samples,
-             #+ still we use a t-quantile to compensate the too low coverage when using qnorm, for the df we add 3L to be less conservative
-             t(c(1L, 1L) %o% (2L * cf - .rowMeans(bs_data, m = length(cf), n = R)) + stats::qt(a, df = sum(nObs)-length(cf)+3L) %o% apply(bs_data, 1L, stats::sd))
-           },
            stop('This type of bootstrap confidence interval is not supported!')
     )
   } #esle useBoot
@@ -945,4 +1047,31 @@ confint.incubate_fit <- function(object, parm, level = 0.95, R = 199L,
 
 
   ci[parm, , drop = FALSE]
+}
+
+#' Transform observed data to unit interval
+#'
+#' The transformation is the probability integral transform. It uses the cumulative distribution function with the estimated parameters of the model fit.
+#' All available data in the model fit is transformed.
+#'
+#' @note
+#' This S3-method implementation is quite different from its default method that allows for non-standard evaluation on data frames, primarily for interactive use.
+#' But the name `transform` just fits so nicely to the intended purpose that it is re-used for the probability integral transform.
+#'
+#' @param _data a fitted model object of class `incubate_fit`
+#' @param ... currently ignored
+#' @return The transformed data, either a vector (for single group) or a list with entries x and y (in two group scenario)
+#' @export
+transform.incubate_fit <- function(`_data`, ...){
+  stopifnot(inherits(`_data`, "incubate_fit"))
+
+  cdfFun <- getDist(`_data`$distribution, type = "cdf")
+
+  twoGroup <- `_data`$twoGroup
+  x <- if (twoGroup) `_data`$data$x else `_data`$data
+
+  tr <- purrr::exec(cdfFun, !!! c(list(q=x), coef(`_data`, group = 'x')))
+  if (twoGroup) tr <- list(x = tr, y = purrr::exec(cdfFun, !!! c(list(q=`_data`$data$y), coef(`_data`, group = 'y'))))
+
+  tr
 }

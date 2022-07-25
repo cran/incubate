@@ -2,7 +2,7 @@
 % Please edit documentation in R/delay_estimation.R
 \name{delay_fit}
 \alias{delay_fit}
-\title{Parameter fitting according to MSE through numerical optimization.}
+\title{Fit optimal parameters according to the objective function (either MPSE or MLE0).}
 \usage{
 delay_fit(objFun, optim_args = NULL, verbose = 0)
 }
@@ -18,5 +18,6 @@ optimization object including a named parameter vector or \code{NULL} in case of
 }
 \description{
 The objective function carries the given data in its environment and it is to be minimized.
-R's standard routine \code{stats::optim} does the optimization, using numerical derivatives.
+R's standard routine \code{stats::optim} does the numerical optimization, using numerical derivatives.
+or the analytical solution is returned directly if available.
 }
