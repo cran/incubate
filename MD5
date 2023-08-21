@@ -1,11 +1,11 @@
-c0ee05381a6881c58187a81f455e66e5 *DESCRIPTION
+ca7d3435efa1576bc35f2aadcf57fac2 *DESCRIPTION
 d63e4a7e458a243280c2f94d43e77443 *NAMESPACE
-eeef1a89ea8f9be35cdab024f2afb7ff *NEWS.md
+ba7a8f62cc2ca87ac7cd75fec9e721c0 *NEWS.md
 c630d9ff5851181029403f42617d8ba4 *R/data.R
 cfe981ef9f09a86874f8176d26800359 *R/delay.R
 0a732b03d497e2fcd824f73250ece21f *R/delay_estimation.R
 d1d6f8aced79cb98830b30f943fb4935 *R/delay_test.R
-7e3e12b8422b86e44ea65e5342e02456 *R/incubate-package.R
+3f6d92587a4e0dd4d8b72155b7eadbb1 *R/incubate-package.R
 23f27f4a40c2886730a653a45862c37b *R/sysdata.rda
 af449e2d7ceeb0034073e576ef432e25 *R/utils.R
 a6becf7aa2d405830e016e5c430842bc *README.md
@@ -19,7 +19,7 @@ bf9a9e429db73e58e0dc06c1377114e4 *man/DelayedWeibull.Rd
 4ab1b211eaefc2db2233c501eb2b71fa *man/as_percent.Rd
 ca20b975e039afebf451fab4bebe85f5 *man/bsDataStep.Rd
 131f4cedab0160e93270b0be21e1e275 *man/coef.incubate_fit.Rd
-ddb508dfc6ad6fa605d3494060dc64ff *man/confint.incubate_fit.Rd
+bd7ccf484fcd64f01404dfe9c91d8718 *man/confint.incubate_fit.Rd
 35135ea42fdc112f47784d622ce9f35f *man/delay_fit.Rd
 a3b20a1249a7e8c281e77e184b7d9843 *man/delay_model.Rd
 c50eab8c1c4fb868a892463056b43836 *man/estimRoundingError.Rd
@@ -27,7 +27,7 @@ c50eab8c1c4fb868a892463056b43836 *man/estimRoundingError.Rd
 ebe9effc8b13edf27c0242ef2a1c1dd5 *man/figures/README-example_inf-1.png
 ecc80d9278c24261809884c7801d00a4 *man/getDist.Rd
 3fad0691ffc35647fbb9575d930b21c5 *man/getPars.Rd
-16a52d65ff55e09f8a5e61288040647b *man/incubate.Rd
+9c87fe552b0f60c38d4013fcb19358ec *man/incubate.Rd
 28eba150ce47c00cc0953d2e5a834dd5 *man/objFunFactory.Rd
 91d7b6236d9dff0056060d51ed340650 *man/power_diff.Rd
 37148141f898e8ba1eea391f1fbbc6d0 *man/stankovic.Rd
