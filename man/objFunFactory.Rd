@@ -3,16 +3,18 @@
 \name{objFunFactory}
 \alias{objFunFactory}
 \title{Factory method for objective function, either according to maximum product of spacings estimation ('MPSE')
-or according to standard maximum likelihood estimation ('MLE0').}
+or according to some flavour of maximum likelihood estimation (e.g., naive ('MLEn') or corrected ('MLEc') or weighted ('MLEw') MLE).}
 \usage{
 objFunFactory(
   x,
   y = NULL,
-  method = c("MPSE", "MLE0"),
   distribution = c("exponential", "weibull"),
+  twoPhase = FALSE,
   bind = NULL,
+  method = c("MPSE", "MLEn", "MLEc", "MLEw"),
+  profiled = FALSE,
   ties = c("density", "equidist", "random", "error"),
-  verbose = 0L
+  verbose = 0
 )
 }
 \arguments{
@@ -20,11 +22,15 @@ objFunFactory(
 
 \item{y}{numeric. observations in second group.}
 
-\item{method}{character(1). Specifies the method for which to build the objective function. Default value is \code{MPSE}. \code{MLE0} is the standard MLE-method, calculating the likelihood function as the product of density values}
-
 \item{distribution}{character(1). delayed distribution family}
 
+\item{twoPhase}{logical flag. Do we allow for two delay phases where event rate may change? Default is \code{FALSE}, i.e., a single delay phase.}
+
 \item{bind}{character. parameter names that are bind together (i.e. equated) between both groups}
+
+\item{method}{character(1). Specifies the method for which to build the objective function. Default value is \code{MPSE}. \code{MLEn} is the naive MLE-method, calculating the likelihood function as the product of density values. \code{MLEc} is the modified MLE.}
+
+\item{profiled}{logical. Should scale parameter be profiled out prior to optimization?}
 
 \item{ties}{character. How to handle ties within data of a group.}
 
@@ -34,9 +40,12 @@ objFunFactory(
 the objective function (e.g., the negative MPSE criterion) for given choice of model parameters or \code{NULL} upon errors
 }
 \description{
-Given the observed data this factory method produces an MPSE objective function implementation
-which is the negative of the MPSE-criterion H or the negative log-likelihood for MLE.
+Given the observed data this factory method produces an objective function
+which is either the negative of the MPSE-criterion H or the negative log-likelihood for MLE.
 }
 \details{
-From the observations, negative or infinite values are discarded. In any case, the objective function is to be minimized.
+The objective function takes a vector of model parameters as argument.
+
+From the observations, negative or infinite values are discarded during pre-processing.
+In any case, the objective function is to be \strong{minimized}.
 }

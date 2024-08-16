@@ -8,10 +8,15 @@ test_diff(
   x,
   y = stop("Provide data for group y!"),
   distribution = c("exponential", "weibull"),
-  param = "delay",
-  R = 400,
+  twoPhase = FALSE,
+  method = c("MPSE", "MLEn", "MLEw", "MLEc"),
+  profiled = method == "MLEw",
   ties = c("density", "equidist", "random", "error"),
-  type = c("all", "bootstrap", "gof", "moran", "pearson", "lr", "lr_pp"),
+  param = "delay1",
+  type = c("all", "bootstrap", "GOF", "moran", "pearson", "logrank", "LR"),
+  doLogrank = TRUE,
+  R = 400,
+  chiSqApprox = FALSE,
   verbose = 0
 )
 }
@@ -22,13 +27,23 @@ test_diff(
 
 \item{distribution}{character(1). Name of the parametric delay distribution to use.}
 
-\item{param}{character. Names of parameters to test difference for. Default value is \code{'delay'}.}
+\item{twoPhase}{logical(1). Do we model two phases per group? Default is \code{FALSE}, i.e. a single delay phase per group.}
 
-\item{R}{numeric(1). Number of bootstrap samples to evaluate the distribution of the test statistic.}
+\item{method}{character. Which method to fit the models.}
+
+\item{profiled}{logical. Use the profiled likelihood?}
 
 \item{ties}{character. How to handle ties in data vector of a group?}
 
+\item{param}{character. Names of parameters to test difference for. Default value is \code{'delay1'}.}
+
 \item{type}{character. Which type of tests to perform?}
+
+\item{doLogrank}{logical. In any case do log-rank based tests?}
+
+\item{R}{numeric(1). Number of bootstrap samples to evaluate the distribution of the test statistic.}
+
+\item{chiSqApprox}{logical flag. In bootstrap, should we calculate the approximate degrees of freedom for the distribution of the test statistic under H0?}
 
 \item{verbose}{numeric. How many details are requested? Higher value means more details. 0=off, no details.}
 }

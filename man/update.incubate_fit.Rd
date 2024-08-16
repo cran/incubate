@@ -3,9 +3,9 @@
 \name{update.incubate_fit}
 \alias{update.incubate_fit}
 \title{Refit an \code{incubate_fit}-object with specified optimization arguments.
-If more things need to be changed use \code{delay_model}.}
+If more things need to be changed go back to \code{delay_model} and start from scratch.}
 \usage{
-\method{update}{incubate_fit}(object, optim_args, verbose = 0, ...)
+\method{update}{incubate_fit}(object, optim_args = NULL, verbose = 0, ...)
 }
 \arguments{
 \item{object}{\code{incubate_fit}-object}
@@ -21,5 +21,5 @@ The updated fitted object of class \code{incubate_fit}
 }
 \description{
 Refit an \code{incubate_fit}-object with specified optimization arguments.
-If more things need to be changed use \code{delay_model}.
+If more things need to be changed go back to \code{delay_model} and start from scratch.
 }

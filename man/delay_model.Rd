@@ -5,12 +5,14 @@
 \title{Fit a delayed Exponential or Weibull model to one or two given sample(s).}
 \usage{
 delay_model(
-  x = stop("Specify observations!", call. = FALSE),
+  x = stop("Specify observations for at least one group x=!", call. = FALSE),
   y = NULL,
   distribution = c("exponential", "weibull"),
-  method = c("MPSE", "MLE0"),
+  twoPhase = FALSE,
   bind = NULL,
   ties = c("density", "equidist", "random", "error"),
+  method = c("MPSE", "MLEn", "MLEw", "MLEc"),
+  profiled = method == "MLEw",
   optim_args = NULL,
   verbose = 0
 )
@@ -22,11 +24,15 @@ delay_model(
 
 \item{distribution}{character. Which delayed distribution is assumed? Exponential or Weibull.}
 
-\item{method}{character. Which method to fit the model? 'MPSE' = maximum product of spacings estimation \emph{or} 'MLE0' = standard maximum likelihood estimation}
+\item{twoPhase}{logical. Allow for two phases?}
 
 \item{bind}{character. parameter names that are bind together in 2-group situation.}
 
 \item{ties}{character. How to handle ties.}
+
+\item{method}{character. Which method to fit the model? 'MPSE' = maximum product of spacings estimation \emph{or} 'MLEn' = naive maximum likelihood estimation \emph{or} 'MLEw' = weighted MLE' \emph{or} MLEc' = corrected MLE}
+
+\item{profiled}{logical. Profile out scale from log-likelihood if possible.}
 
 \item{optim_args}{list. optimization arguments to use. Use \code{NULL} to use the data-dependent default values.}
 
@@ -36,6 +42,9 @@ delay_model(
 \code{incubate_fit} the delay-model fit object. Or \code{NULL} if optimization failed (e.g. too few observations).
 }
 \description{
-Maximum product spacing is used to fit the parameters.
+Maximum product of spacings estimation is used by default to fit the parameters. Estimation via naive maximum likelihood (\verb{method = 'MLEn}) is available, too,
+but MLEn yields biased estimates. MLEc is a corrected version of MLE due to Cheng.
+}
+\details{
 Numerical optimization is done by \code{stats::optim}.
 }

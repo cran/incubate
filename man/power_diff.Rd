@@ -6,22 +6,26 @@
 \usage{
 power_diff(
   distribution = c("exponential", "weibull"),
-  param = "delay",
-  test = c("bootstrap", "pearson", "moran", "lr", "lr_pp"),
-  eff = stop("Provide parameters for both group that reflect the effect!"),
+  twoPhase = FALSE,
+  param = "delay1",
+  test = c("bootstrap", "pearson", "moran", "logrank", "logrank_pp", "LR"),
+  eff = stop("Provide parameters for both groups that reflect the effect!"),
   n = NULL,
   r = 1,
   sig.level = 0.05,
   power = NULL,
   nPowerSim = 1600,
   R = 201,
-  nRange = c(5, 50)
+  nRange = c(5, 50),
+  verbose = 0
 )
 }
 \arguments{
 \item{distribution}{character. Which assumed distribution is used for the power calculation.}
 
-\item{param}{character. Parameter name(s) for which to simulate the power.}
+\item{twoPhase}{logical(1). Do we model two phases per group? Default is \code{FALSE}, i.e. a single delay phase per group.}
+
+\item{param}{character. Parameter name(s) which are to be tested for difference and for which to simulate the power. Default value is \code{'delay1'}.}
 
 \item{test}{character. Which test to use for this power estimation?}
 
@@ -40,6 +44,8 @@ power_diff(
 \item{R}{integer. Number of bootstrap samples for test of difference in parameter within each power simulation. It affects the resolution of the P-value for each simulation round. A value of around \code{R=200} gives a resolution of 0.5\% which might be enough for power analysis.}
 
 \item{nRange}{integer. Admissible range for sample size when power is pre-specified and sample size is requested.}
+
+\item{verbose}{numeric. How many details are requested? Higher value means more details. 0=off, no details.}
 }
 \value{
 List of results of power simulation. Or \code{NULL} in case of errors.
