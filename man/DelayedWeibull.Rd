@@ -35,7 +35,8 @@ pweib_delayed(
   shape = shape1,
   scale = scale1,
   lower.tail = TRUE,
-  log.p = FALSE
+  log.p = FALSE,
+  grad = FALSE
 )
 
 qweib_delayed(
@@ -63,7 +64,8 @@ rweib_delayed(
   scale2 = 1,
   delay = delay1,
   shape = shape1,
-  scale = scale1
+  scale = scale1,
+  cens = 0
 )
 
 mweib_delayed(
@@ -86,13 +88,15 @@ mweib_delayed(
 
 \item{shape1}{numeric. First shape parameter, must be positive.}
 
-\item{scale1}{numeric. First scale parameter (inverse of rate), must be positive.}
+\item{scale1}{numeric. First scale parameter (inverse of rate), must be
+positive.}
 
 \item{delay2}{numeric. The second delay, must be non-negative.}
 
 \item{shape2}{numeric. The second shape parameter, must be non-negative.}
 
-\item{scale2}{numeric. The second scale parameter (inverse of rate), must be positive.}
+\item{scale2}{numeric. The second scale parameter (inverse of rate), must be
+positive.}
 
 \item{delay}{numeric. Alias for first delay.}
 
@@ -106,19 +110,25 @@ mweib_delayed(
 
 \item{lower.tail}{logical. Give cumulative probability of lower tail?}
 
-\item{log.p}{logical. P-value on log-sclae?}
+\item{log.p}{logical. P-value on log-scale?}
+
+\item{grad}{logical. Should the gradient be calculated at the given quantile values (and not the cumulative probabilities)?}
 
 \item{p}{A numeric vector of probabilities.}
 
 \item{n}{integer. Number of random observations requested.}
 
-\item{t}{A numeric vector of times that restrict the mean survival. Default is \code{+Inf}, i.e., the unrestricted mean survival time.}
+\item{cens}{numeric. Proportion of random right-censored observations. For
+small values of shape1, on average fewer censorings are achieved.}
+
+\item{t}{A numeric vector of times that restrict the mean survival. Default
+is \code{+Inf}, i.e., the unrestricted mean survival time.}
 }
 \value{
 Functions pertaining to the delayed Weibull distribution:
 \itemize{
 \item \code{dweib_delayed} gives the density
-\item \code{pweib_delayed} gives the distribution function
+\item \code{pweib_delayed} gives the vector of cumulative probabilities or the gradient matrix (nbr parameters x quantile times)
 \item \code{qweib_delayed} gives the quantile function
 \item \code{rweib_delayed} generates a pseudo-random sample
 \item \code{mweib_delayed} gives the restricted mean survival time
@@ -135,8 +145,10 @@ Besides the additional parameter \code{delay}, the other two Weibull-parameters 
 }
 }
 \details{
-Additional arguments are forwarded via \code{...} to the underlying functions of the exponential distribution in the stats-package.
+Additional arguments are forwarded via \code{...} to the underlying functions of
+the exponential distribution in the stats-package.
 
-The numerical arguments other than \code{n} are recycled to the length of the result. Only the first elements of the logical arguments are used.
+The numerical arguments other than \code{n} are recycled to the length of the
+result. Only the first elements of the logical arguments are used.
 }
 \keyword{distribution}

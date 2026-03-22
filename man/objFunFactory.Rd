@@ -2,19 +2,16 @@
 % Please edit documentation in R/delay_estimation.R
 \name{objFunFactory}
 \alias{objFunFactory}
-\title{Factory method for objective function, either according to maximum product of spacings estimation ('MPSE')
-or according to some flavour of maximum likelihood estimation (e.g., naive ('MLEn') or corrected ('MLEc') or weighted ('MLEw') MLE).}
+\title{Factory method for objective function}
 \usage{
 objFunFactory(
   x,
   y = NULL,
-  distribution = c("exponential", "weibull"),
+  distO,
+  method = c("MPSE", "MLEn", "MLEc", "MLEw"),
   twoPhase = FALSE,
   bind = NULL,
-  method = c("MPSE", "MLEn", "MLEc", "MLEw"),
-  profiled = FALSE,
-  ties = c("density", "equidist", "random", "error"),
-  verbose = 0
+  control
 )
 }
 \arguments{
@@ -22,30 +19,32 @@ objFunFactory(
 
 \item{y}{numeric. observations in second group.}
 
-\item{distribution}{character(1). delayed distribution family}
-
-\item{twoPhase}{logical flag. Do we allow for two delay phases where event rate may change? Default is \code{FALSE}, i.e., a single delay phase.}
-
-\item{bind}{character. parameter names that are bind together (i.e. equated) between both groups}
+\item{distO}{distribution object}
 
 \item{method}{character(1). Specifies the method for which to build the objective function. Default value is \code{MPSE}. \code{MLEn} is the naive MLE-method, calculating the likelihood function as the product of density values. \code{MLEc} is the modified MLE.}
 
-\item{profiled}{logical. Should scale parameter be profiled out prior to optimization?}
+\item{twoPhase}{logical flag. Do we allow for two delay phases where event rate may change? Default is \code{FALSE}, i.e., a single delay phase.}
 
-\item{ties}{character. How to handle ties within data of a group.}
+\item{bind}{character. parameter names that are bound together (i.e. equated) between both groups}
 
-\item{verbose}{integer flag. How much verbosity in output? The higher the more output. Default value is 0 which is no output.}
+\item{control}{list. Fine-tune parameters for optimization. Needs to be set!}
 }
 \value{
 the objective function (e.g., the negative MPSE criterion) for given choice of model parameters or \code{NULL} upon errors
 }
 \description{
 Given the observed data this factory method produces an objective function
-which is either the negative of the MPSE-criterion H or the negative log-likelihood for MLE.
+which is either the negative of the MPSE-criterion H or some flavour of the negative log-likelihood for MLE.
+Implemented variants of MLE-objective functions are naive MLE (\code{'MLEn'}), corrected MLE (\code{'MLEc'}) or weighted MLE (\code{'MLEw'}).
+In any case, the objective function is to be \strong{minimized}.
 }
 \details{
 The objective function takes a vector of model parameters as argument.
-
 From the observations, negative or infinite values are discarded during pre-processing.
-In any case, the objective function is to be \strong{minimized}.
+
+Profiling is implemented for single-phase models for Weibull and Exponential distributions:
+profiling allows to estimate scale1 parameter (resp. rate1= for exponential) based on delay1 (and shape1 for Weibull).
+Except for MLEw, the formula is derived from the conventional log-likelihood through equating its partial derivative with respect to scale1 to zer0.
+This leads to the candidate value for scale1. This approach can be used also for the methods MPSE and MLEc.
+For MLEw (weighted MLE) we have a weighting factor also in the formula for scale1.
 }

@@ -28,7 +28,9 @@ pexp_delayed(
   rate2 = NULL,
   delay = delay1,
   rate = rate1,
-  ...
+  lower.tail = TRUE,
+  log.p = FALSE,
+  grad = FALSE
 )
 
 qexp_delayed(
@@ -50,7 +52,8 @@ rexp_delayed(
   delay2 = NULL,
   rate2 = NULL,
   delay = delay1,
-  rate = rate1
+  rate = rate1,
+  cens = 0
 )
 
 mexp_delayed(
@@ -82,15 +85,17 @@ mexp_delayed(
 
 \item{q}{A numeric vector of quantile values.}
 
-\item{...}{further arguments are passed on to the underlying non-delayed function, e.g., \verb{lower.tail=} to \code{\link[stats:Exponential]{stats::pexp()}}}
+\item{lower.tail}{logical. Give cumulative probability of lower tail?}
+
+\item{log.p}{logical. P-value on log-scale?}
+
+\item{grad}{logical. Should the gradient be calculated at the given quantile values (and not the cumulative probabilities)?}
 
 \item{p}{A numeric vector of probabilities.}
 
-\item{lower.tail}{logical. Give cumulative probability of lower tail?}
-
-\item{log.p}{logical. P-value on log-sclae?}
-
 \item{n}{integer. Number of random observations requested.}
+
+\item{cens}{numeric. Expected proportion of random right-censored observations.}
 
 \item{t}{A numeric vector of times that restrict the mean survival. Default is \code{+Inf}, i.e., the unrestricted mean survival time.}
 }
@@ -98,7 +103,7 @@ mexp_delayed(
 Functions pertaining to the delayed exponential distribution:
 \itemize{
 \item \code{dexp_delayed} gives the density
-\item \code{pexp_delayed} gives the distribution function
+\item \code{pexp_delayed} gives the vector of cumulative probabilities or the gradient matrix (nbr parameters x quantile times)
 \item \code{qexp_delayed} gives the quantile function
 \item \code{rexp_delayed} generates a pseudo-random sample
 \item \code{mexp_delayed} gives the restricted mean survival time
@@ -106,6 +111,8 @@ Functions pertaining to the delayed exponential distribution:
 
 The length of the result is determined by \code{n} for \code{rexp_delayed}, and is the maximum of the lengths of the numerical arguments for the other functions,
 R's recycling rules apply when only single initial delay phase is used.
+
+Vector of cumulative probabilities or gradient matrix (nbr parameter x quantile times)
 }
 \description{
 Density, distribution function, quantile function, random generation and restricted mean survival time function for the delayed exponential distribution.
@@ -113,12 +120,11 @@ There is an initial delay phase (parameter \code{delay1}) where no events occur.
 Optionally, a second phase is possible where the hazard rate might change (parameters \code{delay2} and \code{rate2}).
 }
 \details{
-Additional arguments are forwarded via \code{...} to the underlying functions of the exponential distribution in the \code{stats}-package.
 If only a single initial delay phase is there, the numerical arguments other than \code{n} are recycled to the length of the result (as with the exponential distribution in \code{stats}).
 With two phases, the arguments are \strong{not} recycled. Only the first element of delays and rates are used as it otherwise becomes ambiguous which delay and rate parameter apply for observations in different phases.
 Generally, only the first elements of the logical arguments are used.
 }
 \seealso{
-stats::Exponential
+\link[stats:Exponential]{stats::Exponential}
 }
 \keyword{distribution}
