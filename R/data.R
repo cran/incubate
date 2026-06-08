@@ -23,9 +23,11 @@
 #'
 #' Measles broke out during a sailing ship passage from England to Australia
 #' involving six persons on the ship. Serial interval times, i.e. the time of
-#' clinical onset between successive cases in a chain of transmission, were
-#' recorded. The interval times for the first three cases was not observed
-#' completely as they brought measles on board.
+#' clinical onset between successive cases in a chain of transmission, are
+#' provided under the assumption that all transmission pairs represent direct
+#' transmissions, excluding co-primary cases and asymptomatic intermediaries.
+#' The interval times for the first three cases was not observed
+#' completely as they brought measles on board with serial interval times unknown.
 #'
 #' @details
 #' In 1829, the British sailing vessel HMS America carried 176 prisoners from
@@ -44,7 +46,7 @@
 #'
 #' @format A data frame with 6 rows and 4 variables:
 #' \describe{
-#'   \item{generation}{Disease generation on sailer}
+#'   \item{generation}{Disease generation on sailer. Source cases are generation 0.}
 #'   \item{symptomOnset}{Days of first symptoms since the start of the journey}
 #'   \item{serialInterval}{Days between successive cases in chain of
 #'   transmission, from symptom to symptom}
@@ -66,8 +68,8 @@
 #'
 #' Data stem from a double-blind, placebo-controlled phase 3 trial where n=870
 #' patients with completely resected, stage III melanoma with BRAF V600E or
-#' V600K mutations were randomly assigned to receive oral dabrafenib plus
-#' trametinib (combination therapy, 438 patients) or two matched placebo tablets
+#' V600K mutations were randomly assigned to receive oral Dabrafenib plus
+#' Trametinib (combination therapy, 438 patients) or two matched placebo tablets
 #' (432 patients) for 12 months.
 #'
 #' @details
